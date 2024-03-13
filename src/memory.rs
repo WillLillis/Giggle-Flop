@@ -2,13 +2,16 @@
 
 use std::{collections::VecDeque, fmt::Display};
 
-use log::{error, info, warn};
-
-use anyhow::{anyhow, Result};
-
 use crate::common::{Cycle, PipelineStage};
 
+use anyhow::{anyhow, Result};
+use log::{error, info, warn};
+
 pub const MEM_BLOCK_WIDTH: usize = 32;
+#[allow(dead_code)]
+pub const N_ADDRESS_BITS: usize = 21;
+#[allow(dead_code)]
+pub const ADDRESS_SPACE_SIZE: usize = 2usize.pow(N_ADDRESS_BITS as u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MemWidth {
@@ -78,6 +81,17 @@ impl MemLine {
 
         range.contains(&address)
     }
+
+    pub fn write(&mut self, address: usize, data: MemBlock) -> Result<()> {
+        if !self.contains_address(address) {
+            return Err(anyhow!("Address not contained within line"));
+        }
+        let line_len = self.data.len();
+        let line_idx = (address % (line_len * MEM_BLOCK_WIDTH)) / MEM_BLOCK_WIDTH;
+        self.data[line_idx] = data;
+
+        Ok(())
+    }
 }
 
 impl Display for MemLine {
@@ -90,9 +104,71 @@ impl Display for MemLine {
         if let Some(addr) = self.start_addr {
             write!(f, "<0x{addr:08X}>:{blocks}")?;
         } else {
-            write!(f, "<<No Entry>>:{blocks}")?;
+            write!(f, "<<No Entry>>:{blocks}")?; // Extra '<' and '>' to align with addresses
         }
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::memory::MemBlock;
+
+    use super::{MemLine, ADDRESS_SPACE_SIZE, MEM_BLOCK_WIDTH};
+
+    use rand::random;
+
+    fn get_test_memline(base_addr: usize, line_len: usize) -> MemLine {
+        MemLine::new(Some(base_addr), line_len)
+    }
+
+    #[test]
+    fn contains_addresses() {
+        for _ in 0..10 {
+            // use %'s to prevent overflow...
+            let line_len = (random::<usize>() % 64) + 1;
+            let base_addr = (random::<usize>() % 128) * line_len;
+            let line = get_test_memline(base_addr, line_len);
+            for offset in 0..line_len * MEM_BLOCK_WIDTH {
+                let addr = base_addr + offset;
+                assert!(line.contains_address(addr));
+            }
+        }
+    }
+
+    #[test]
+    fn does_not_contain_addresses() {
+        for _ in 0..10 {
+            // use %'s to prevent overflow...
+            let line_len = (random::<usize>() % 64) + 1;
+            let base_addr = (random::<usize>() % 128) * line_len;
+            let line = get_test_memline(base_addr, line_len);
+            for offset in line_len * MEM_BLOCK_WIDTH..ADDRESS_SPACE_SIZE {
+                let addr = base_addr + offset;
+                assert!(!line.contains_address(addr));
+            }
+        }
+    }
+
+    #[test]
+    fn writes_correct_index() {
+        for _ in 0..10 {
+            // use %'s to prevent overflow...
+            let line_len = (random::<usize>() % 64) + 1;
+            let base_addr = (random::<usize>() % 128) * line_len;
+            let blocks = vec![MemBlock::Bits32(777); line_len];
+            let mut line = get_test_memline(base_addr, line_len);
+
+            for i in 0..line_len {
+                line.write(base_addr + (MEM_BLOCK_WIDTH * i), blocks[i])
+                    .unwrap();
+            }
+
+            for i in 0..blocks.len() {
+                assert!(line.data[i] == blocks[i]);
+            }
+        }
     }
 }
 
@@ -139,17 +215,16 @@ impl MemoryLevel {
     fn load(&mut self, req: &LoadRequest) -> MemResponse {
         let line_len = self.contents.first().unwrap().data.len();
         let address = req.address % (self.contents.len() * line_len * MEM_BLOCK_WIDTH);
+        let line_idx = self.address_index(address);
 
         if !self.is_main {
-            let line = address / (line_len * MEM_BLOCK_WIDTH);
-            if !self.contents[line].contains_address(address) {
+            if !self.contents[line_idx].contains_address(address) {
                 return MemResponse::Miss;
             }
         }
         match self.curr_req {
             Some((0, MemRequest::Load(ref completed_req))) if completed_req == req => {
-                let line = address / (line_len * MEM_BLOCK_WIDTH);
-                let data = self.contents[line].clone();
+                let data = self.contents[line_idx].clone();
 
                 self.curr_req = None;
                 if let Some(next_req) = self.reqs.pop_front() {
@@ -173,6 +248,13 @@ impl MemoryLevel {
         MemResponse::Wait
     }
 
+    /// Returns the index of the internal Vec of MemoryLines that would contain
+    /// the supplied `address`
+    fn address_index(&self, address: usize) -> usize {
+        let line_len = self.contents.first().unwrap().data.len();
+        address / (line_len * MEM_BLOCK_WIDTH)
+    }
+
     /// Removes any cache entries containing the given `address`
     pub fn invalidate_address(&mut self, address: usize) {
         // don't invalidate entries in the main memory
@@ -187,11 +269,9 @@ impl MemoryLevel {
     }
 
     // not to be called directly (only from Memory class)
-    pub fn write(&mut self, address: usize, data: MemBlock) {
-        let line_len = self.contents.first().unwrap().data.len();
-        let line = address / (line_len * MEM_BLOCK_WIDTH);
-        let line_idx = (address % (line_len * MEM_BLOCK_WIDTH)) / MEM_BLOCK_WIDTH;
-        self.contents[line].data[line_idx] = data;
+    pub fn write(&mut self, address: usize, data: MemBlock) -> Result<()> {
+        let line_idx = self.address_index(address);
+        self.contents[line_idx].write(address, data)
     }
 
     pub fn update_clock(&mut self) {
@@ -372,9 +452,11 @@ impl Memory {
         match main_mem.curr_req {
             Some((0, MemRequest::Store(ref completed_req))) if completed_req == req => {
                 // actually write the data...
-                main_mem.write(completed_req.address, completed_req.data);
+                main_mem
+                    .write(completed_req.address, completed_req.data)
+                    .expect("Write failed -- Error {e}");
 
-                // book keeping on request queue
+                // book-keeping on request queue
                 main_mem.curr_req = None;
                 if let Some(next_req) = main_mem.reqs.pop_front() {
                     main_mem.curr_req = Some((main_mem.latency, next_req));

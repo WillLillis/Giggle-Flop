@@ -196,6 +196,7 @@ dependencies = [
  "dialoguer",
  "flexi_logger",
  "log",
+ "rand",
 ]
 
 [[package]]
