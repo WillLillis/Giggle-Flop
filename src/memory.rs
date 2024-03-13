@@ -10,7 +10,7 @@ use log::{error, info, warn};
 pub const MEM_BLOCK_WIDTH: usize = 32;
 #[allow(dead_code)]
 pub const N_ADDRESS_BITS: usize = 21;
-#[allow(dead_code)]
+#[allow(dead_code, clippy::cast_possible_truncation)]
 pub const ADDRESS_SPACE_SIZE: usize = 2usize.pow(N_ADDRESS_BITS as u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -212,15 +212,15 @@ impl MemoryLevel {
         }
     }
 
+    /// Issues a new load request, or checks the status of an existing (matching)
+    /// load request
     fn load(&mut self, req: &LoadRequest) -> MemResponse {
         let line_len = self.contents.first().unwrap().data.len();
         let address = req.address % (self.contents.len() * line_len * MEM_BLOCK_WIDTH);
         let line_idx = self.address_index(address);
 
-        if !self.is_main {
-            if !self.contents[line_idx].contains_address(address) {
-                return MemResponse::Miss;
-            }
+        if !self.is_main && !self.contents[line_idx].contains_address(address) {
+            return MemResponse::Miss;
         }
         match self.curr_req {
             Some((0, MemRequest::Load(ref completed_req))) if completed_req == req => {
@@ -248,7 +248,7 @@ impl MemoryLevel {
         MemResponse::Wait
     }
 
-    /// Returns the index of the internal Vec of MemoryLines that would contain
+    /// Returns the index of the internal Vec of `MemLine`s that would contain
     /// the supplied `address`
     fn address_index(&self, address: usize) -> usize {
         let line_len = self.contents.first().unwrap().data.len();
@@ -268,7 +268,7 @@ impl MemoryLevel {
         self.contents[line] = MemLine::new(None, line_len);
     }
 
-    // not to be called directly (only from Memory class)
+    /// Writes a single word to the appropriate address
     pub fn write(&mut self, address: usize, data: MemBlock) -> Result<()> {
         let line_idx = self.address_index(address);
         self.contents[line_idx].write(address, data)

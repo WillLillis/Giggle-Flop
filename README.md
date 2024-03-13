@@ -1,13 +1,13 @@
 # Giggle Flop
 
-A toy ISA designed and implemented from scratch.
+A toy ISA designed and simulated from scratch.
 
 ## Memory System
 
 - Configurable cache
     - Variable number of levels
     - Custom access latency and capacity per level
-    - Cache line length configurable 
+    - Cache line length configurable
 - Write-through no-allocate scheme
 - Direct mapped cache
 

@@ -9,8 +9,10 @@ use crate::common::{Cycle, PipelineStage};
 use crate::memory::{LoadRequest, MemRequest, MemWidth, StoreRequest, MEM_BLOCK_WIDTH};
 
 fn main() -> Result<()> {
-    // TODO: Integrate option to write logs to a file
     flexi_logger::Logger::try_with_str("info")?.start()?;
+
+    // NOTE: This code won't make it in the final version, this
+    // is just for the purposes of the 3-13-24 Demo...
 
     let giggle = cfonts::render(cfonts::Options {
         text: String::from("Giggle"),
@@ -29,9 +31,6 @@ fn main() -> Result<()> {
     print!("{}", flop.text);
 
     let mut mem = memory::Memory::new(4, &[32, 64, 128], &[1, 5, 6]);
-    // NOTE: This code won't make it in the final version, this
-    // is just for the purposes of the 3-13-24 Demo...
-
     let actions = &["Advance Clock", "Load", "Store", "Display", "Quit"];
     let data_widths = &["8  bits", "16 bits", "32 bits"];
     let mut curr_cycle: Cycle = 0;
