@@ -1,3 +1,5 @@
+#![warn(clippy::all, clippy::pedantic)]
+
 mod common;
 mod memory;
 
@@ -6,8 +8,9 @@ use anyhow::Result;
 use dialoguer::{theme::ColorfulTheme, Input, Select};
 
 use crate::common::{Cycle, PipelineStage};
-use crate::memory::{LoadRequest, MemRequest, MemWidth, StoreRequest, MEM_BLOCK_WIDTH};
+use crate::memory::memory_system::{MemRequest, Memory, StoreRequest};
 
+#[allow(clippy::too_many_lines)] // junk code the demo...
 fn main() -> Result<()> {
     flexi_logger::Logger::try_with_str("info")?.start()?;
 
@@ -30,7 +33,7 @@ fn main() -> Result<()> {
     print!("{}", giggle.text);
     print!("{}", flop.text);
 
-    let mut mem = memory::Memory::new(4, &[32, 64, 128], &[1, 5, 6]);
+    let mut mem = Memory::new(4, &[32, 64, 128], &[1, 5, 6]);
     let actions = &["Advance Clock", "Load", "Store", "Display", "Quit"];
     let data_widths = &["8  bits", "16 bits", "32 bits"];
     let mut curr_cycle: Cycle = 0;
@@ -56,7 +59,7 @@ fn main() -> Result<()> {
                     .with_prompt("Address")
                     .validate_with({
                         move |input: &String| -> Result<(), String> {
-                            let main_cap = 2097152; // 2^21
+                            let main_cap = memory::memory_system::ADDRESS_SPACE_SIZE;
                             let parsed_num = match input.parse::<usize>() {
                                 Ok(num) => num,
                                 Err(e) => {
@@ -68,9 +71,10 @@ fn main() -> Result<()> {
                                     "Value must lie in the range (0, 2097152]",
                                 ));
                             }
-                            if parsed_num % MEM_BLOCK_WIDTH != 0 {
+                            if parsed_num % memory::memory_system::MEM_BLOCK_WIDTH != 0 {
                                 return Err(format!(
-                                    "Value must be a multiple of {MEM_BLOCK_WIDTH}"
+                                    "Value must be a multiple of {}",
+                                    memory::memory_system::MEM_BLOCK_WIDTH
                                 ));
                             }
                             Ok(())
@@ -88,21 +92,22 @@ fn main() -> Result<()> {
                     .unwrap();
 
                 let width = match width {
-                    0 => MemWidth::Bits8,
-                    1 => MemWidth::Bits16,
-                    2 => MemWidth::Bits32,
+                    0 => memory::memory_system::MemWidth::Bits8,
+                    1 => memory::memory_system::MemWidth::Bits16,
+                    2 => memory::memory_system::MemWidth::Bits32,
                     _ => {
                         unreachable!()
                     }
                 };
 
-                let request = MemRequest::Load(LoadRequest {
-                    issuer: PipelineStage::System,
-                    address,
-                    width,
-                });
+                let request =
+                    memory::memory_system::MemRequest::Load(memory::memory_system::LoadRequest {
+                        issuer: PipelineStage::System,
+                        address,
+                        width,
+                    });
                 let val = mem.request(&request)?;
-                println!("Load Response: {:?}", val);
+                println!("Load Response: {val:?}");
                 curr_cycle += 1;
                 mem.update_clock();
             }
@@ -112,7 +117,7 @@ fn main() -> Result<()> {
                     .with_prompt("Address")
                     .validate_with({
                         move |input: &String| -> Result<(), String> {
-                            let main_cap = 2097152; // 2^21
+                            let main_cap = memory::memory_system::ADDRESS_SPACE_SIZE;
                             let parsed_num = match input.parse::<usize>() {
                                 Ok(num) => num,
                                 Err(e) => {
@@ -124,9 +129,10 @@ fn main() -> Result<()> {
                                     "Value must lie in the range (0, 2097152]",
                                 ));
                             }
-                            if parsed_num % MEM_BLOCK_WIDTH != 0 {
+                            if parsed_num % memory::memory_system::MEM_BLOCK_WIDTH != 0 {
                                 return Err(format!(
-                                    "Value must be a multiple of {MEM_BLOCK_WIDTH}"
+                                    "Value must be a multiple of {}",
+                                    memory::memory_system::MEM_BLOCK_WIDTH
                                 ));
                             }
                             Ok(())
@@ -144,17 +150,17 @@ fn main() -> Result<()> {
                     .unwrap();
 
                 let width = match width {
-                    0 => MemWidth::Bits8,
-                    1 => MemWidth::Bits16,
-                    2 => MemWidth::Bits32,
+                    0 => memory::memory_system::MemWidth::Bits8,
+                    1 => memory::memory_system::MemWidth::Bits16,
+                    2 => memory::memory_system::MemWidth::Bits32,
                     _ => {
                         unreachable!()
                     }
                 };
                 let max_val: usize = match width {
-                    MemWidth::Bits8 => u8::MAX as usize,
-                    MemWidth::Bits16 => u16::MAX as usize,
-                    MemWidth::Bits32 => u32::MAX as usize,
+                    memory::memory_system::MemWidth::Bits8 => u8::MAX as usize,
+                    memory::memory_system::MemWidth::Bits16 => u16::MAX as usize,
+                    memory::memory_system::MemWidth::Bits32 => u32::MAX as usize,
                 };
 
                 let data = Input::with_theme(&ColorfulTheme::default())
@@ -178,9 +184,15 @@ fn main() -> Result<()> {
                     .interact_text()
                     .unwrap();
                 let data = match width {
-                    MemWidth::Bits8 => memory::MemBlock::Bits8(data.parse().unwrap()),
-                    MemWidth::Bits16 => memory::MemBlock::Bits16(data.parse().unwrap()),
-                    MemWidth::Bits32 => memory::MemBlock::Bits32(data.parse().unwrap()),
+                    memory::memory_system::MemWidth::Bits8 => {
+                        memory::memory_system::MemBlock::Bits8(data.parse().unwrap())
+                    }
+                    memory::memory_system::MemWidth::Bits16 => {
+                        memory::memory_system::MemBlock::Bits16(data.parse().unwrap())
+                    }
+                    memory::memory_system::MemWidth::Bits32 => {
+                        memory::memory_system::MemBlock::Bits32(data.parse().unwrap())
+                    }
                 };
 
                 let request = MemRequest::Store(StoreRequest {
@@ -189,7 +201,7 @@ fn main() -> Result<()> {
                     data,
                 });
                 let val = mem.request(&request)?;
-                println!("Store Response: {:?}", val);
+                println!("Store Response: {val:?}");
                 curr_cycle += 1;
                 mem.update_clock();
             }
@@ -208,8 +220,7 @@ fn main() -> Result<()> {
                             };
                             if parsed_num > n_levels {
                                 return Err(format!(
-                                    "Level select must lie in the range [0,{})",
-                                    n_levels
+                                    "Level select must lie in the range [0, {n_levels})",
                                 ));
                             }
                             Ok(())
