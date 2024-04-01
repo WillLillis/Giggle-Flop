@@ -1,3 +1,4 @@
+// TODO: Start work on cutting out unnecessary parts from this demo...
 use std::borrow::Cow;
 
 use iced::widget::scrollable::Properties;
@@ -10,6 +11,7 @@ use iced::{Alignment, Border, Color, Command, Element, Length, Theme};
 use once_cell::sync::Lazy;
 
 use crate::memory;
+use crate::system::system::System;
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 
@@ -20,13 +22,9 @@ pub fn enter_ui() -> iced::Result {
 }
 
 struct GiggleFlopUI {
-    scrollable_direction: Direction,
-    scrollbar_width: u16,
-    scrollbar_margin: u16,
-    scroller_width: u16,
     current_scroll_offset: scrollable::RelativeOffset,
     alignment: scrollable::Alignment,
-    mem_state: memory::memory_system::Memory,
+    system: System,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Copy)]
@@ -40,9 +38,6 @@ enum Direction {
 enum Message {
     SwitchDirection(Direction),
     AlignmentChanged(scrollable::Alignment),
-    ScrollbarWidthChanged(u16),
-    ScrollbarMarginChanged(u16),
-    ScrollerWidthChanged(u16),
     ScrollToBeginning,
     ScrollToEnd,
     Scrolled(scrollable::Viewport),
@@ -51,13 +46,9 @@ enum Message {
 impl GiggleFlopUI {
     fn new() -> Self {
         GiggleFlopUI {
-            scrollable_direction: Direction::Vertical,
-            scrollbar_width: 10,
-            scrollbar_margin: 0,
-            scroller_width: 10,
             current_scroll_offset: scrollable::RelativeOffset::START,
             alignment: scrollable::Alignment::Start,
-            mem_state: memory::memory_system::Memory::new(4, &vec![32], &vec![1]),
+            system: System::default(),
         }
     }
 
@@ -65,7 +56,6 @@ impl GiggleFlopUI {
         match message {
             Message::SwitchDirection(direction) => {
                 self.current_scroll_offset = scrollable::RelativeOffset::START;
-                self.scrollable_direction = direction;
 
                 scrollable::snap_to(SCROLLABLE_ID.clone(), self.current_scroll_offset)
             }
@@ -74,21 +64,6 @@ impl GiggleFlopUI {
                 self.alignment = alignment;
 
                 scrollable::snap_to(SCROLLABLE_ID.clone(), self.current_scroll_offset)
-            }
-            Message::ScrollbarWidthChanged(width) => {
-                self.scrollbar_width = width;
-
-                Command::none()
-            }
-            Message::ScrollbarMarginChanged(margin) => {
-                self.scrollbar_margin = margin;
-
-                Command::none()
-            }
-            Message::ScrollerWidthChanged(width) => {
-                self.scroller_width = width;
-
-                Command::none()
             }
             Message::ScrollToBeginning => {
                 self.current_scroll_offset = scrollable::RelativeOffset::START;
@@ -109,49 +84,6 @@ impl GiggleFlopUI {
     }
 
     fn view(&self) -> Element<Message> {
-        let scrollbar_width_slider =
-            slider(0..=15, self.scrollbar_width, Message::ScrollbarWidthChanged);
-        let scrollbar_margin_slider = slider(
-            0..=15,
-            self.scrollbar_margin,
-            Message::ScrollbarMarginChanged,
-        );
-        let scroller_width_slider =
-            slider(0..=15, self.scroller_width, Message::ScrollerWidthChanged);
-
-        let scroll_slider_controls = column![
-            text("Scrollbar width:"),
-            scrollbar_width_slider,
-            text("Scrollbar margin:"),
-            scrollbar_margin_slider,
-            text("Scroller width:"),
-            scroller_width_slider,
-        ]
-        .spacing(10);
-
-        let scroll_orientation_controls = column![
-            text("Scrollbar direction:"),
-            radio(
-                "Vertical",
-                Direction::Vertical,
-                Some(self.scrollable_direction),
-                Message::SwitchDirection,
-            ),
-            radio(
-                "Horizontal",
-                Direction::Horizontal,
-                Some(self.scrollable_direction),
-                Message::SwitchDirection,
-            ),
-            radio(
-                "Both!",
-                Direction::Multi,
-                Some(self.scrollable_direction),
-                Message::SwitchDirection,
-            ),
-        ]
-        .spacing(10);
-
         let scroll_alignment_controls = column![
             text("Scrollable alignment:"),
             radio(
@@ -169,13 +101,7 @@ impl GiggleFlopUI {
         ]
         .spacing(10);
 
-        let scroll_controls = row![
-            scroll_slider_controls,
-            scroll_orientation_controls,
-            scroll_alignment_controls,
-            "This is a test",
-        ]
-        .spacing(20);
+        let scroll_controls = row![scroll_alignment_controls, "This is a test",].spacing(20);
 
         let scroll_to_end_button = || {
             button("Scroll to end")
@@ -189,20 +115,14 @@ impl GiggleFlopUI {
                 .on_press(Message::ScrollToBeginning)
         };
 
-        let scrollable_content: Element<Message> = Element::from(match self.scrollable_direction {
-            Direction::Vertical => Scrollable::with_direction(
+        let scrollable_content: Element<Message> = Element::from({
+            Scrollable::with_direction(
                 column![
                     scroll_to_end_button(),
-                    text("Beginning!"),
-                    vertical_space().height(1200),
-                    text("Middle!"),
-                    vertical_space().height(1200),
-                    text("End!"),
                     text(
-                        self.mem_state
-                            .get_level(0)
-                            .unwrap()
-                    ), // just testing things...
+                        // BUG: This is a test...
+                        self.system.memory_system.get_level(0).unwrap()
+                    ),
                     scroll_to_beginning_button(),
                 ]
                 .align_items(Alignment::Center)
@@ -210,106 +130,22 @@ impl GiggleFlopUI {
                 .spacing(40),
                 scrollable::Direction::Vertical(
                     Properties::new()
-                        .width(self.scrollbar_width)
-                        .margin(self.scrollbar_margin)
-                        .scroller_width(self.scroller_width)
+                        .width(10)
+                        .margin(10)
+                        .scroller_width(10)
                         .alignment(self.alignment),
                 ),
             )
-            .width(Length::Fill)
+            .width(Length::Fill) // TODO: Don't fill entire window...
             .height(Length::Fill)
             .id(SCROLLABLE_ID.clone())
-            .on_scroll(Message::Scrolled),
-            Direction::Horizontal => Scrollable::with_direction(
-                row![
-                    scroll_to_end_button(),
-                    text("Beginning!"),
-                    horizontal_space().width(1200),
-                    text("Middle!"),
-                    horizontal_space().width(1200),
-                    text("End!"),
-                    scroll_to_beginning_button(),
-                ]
-                .height(450)
-                .align_items(Alignment::Center)
-                .padding([0, 40, 0, 40])
-                .spacing(40),
-                scrollable::Direction::Horizontal(
-                    Properties::new()
-                        .width(self.scrollbar_width)
-                        .margin(self.scrollbar_margin)
-                        .scroller_width(self.scroller_width)
-                        .alignment(self.alignment),
-                ),
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .id(SCROLLABLE_ID.clone())
-            .on_scroll(Message::Scrolled),
-            Direction::Multi => Scrollable::with_direction(
-                //horizontal content
-                row![
-                    column![
-                        text("Let's do some scrolling!"),
-                        vertical_space().height(2400)
-                    ],
-                    scroll_to_end_button(),
-                    text("Horizontal - Beginning!"),
-                    horizontal_space().width(1200),
-                    //vertical content
-                    column![
-                        text("Horizontal - Middle!"),
-                        scroll_to_end_button(),
-                        text("Vertical - Beginning!"),
-                        vertical_space().height(1200),
-                        text("Vertical - Middle!"),
-                        vertical_space().height(1200),
-                        text("Vertical - End!"),
-                        scroll_to_beginning_button(),
-                        vertical_space().height(40),
-                    ]
-                    .spacing(40),
-                    horizontal_space().width(1200),
-                    text("Horizontal - End!"),
-                    scroll_to_beginning_button(),
-                ]
-                .align_items(Alignment::Center)
-                .padding([0, 40, 0, 40])
-                .spacing(40),
-                {
-                    let properties = Properties::new()
-                        .width(self.scrollbar_width)
-                        .margin(self.scrollbar_margin)
-                        .scroller_width(self.scroller_width)
-                        .alignment(self.alignment);
-
-                    scrollable::Direction::Both {
-                        horizontal: properties,
-                        vertical: properties,
-                    }
-                },
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .id(SCROLLABLE_ID.clone())
-            .on_scroll(Message::Scrolled),
+            .on_scroll(Message::Scrolled)
         });
 
-        let progress_bars: Element<Message> = match self.scrollable_direction {
-            Direction::Vertical => progress_bar(0.0..=1.0, self.current_scroll_offset.y).into(),
-            Direction::Horizontal => progress_bar(0.0..=1.0, self.current_scroll_offset.x)
-                .style(progress_bar_custom_style)
-                .into(),
-            Direction::Multi => column![
-                progress_bar(0.0..=1.0, self.current_scroll_offset.y),
-                progress_bar(0.0..=1.0, self.current_scroll_offset.x)
-                    .style(progress_bar_custom_style)
-            ]
-            .spacing(10)
-            .into(),
-        };
+        let progress_bar: Element<Message> =
+            progress_bar(0.0..=1.0, self.current_scroll_offset.y).into();
 
-        let content: Element<Message> = column![scroll_controls, scrollable_content, progress_bars]
+        let content: Element<Message> = column![scroll_controls, scrollable_content, progress_bar]
             .align_items(Alignment::Center)
             .spacing(10)
             .into();
