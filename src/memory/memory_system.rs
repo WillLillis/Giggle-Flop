@@ -1,6 +1,8 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)] // pub mod memory_system, Memory
 
+use std::borrow::Cow;
+
 use crate::common::{Cycle, PipelineStage};
 pub use crate::memory::memory_block::MemBlock;
 use crate::memory::memory_level::MemoryLevel;
@@ -288,6 +290,15 @@ impl Memory {
 
         println!("Memory Level {level}:\n{}", self.levels[level]);
         Ok(())
+    }
+
+    /// Returns a cow of the requested level
+    pub fn get_level(&self, level: usize) -> Result<Cow<MemoryLevel>> {
+        if level >= self.num_levels() {
+            return Err(anyhow!("Invalid level number"));
+        }
+
+        Ok(Cow::Borrowed(&self.levels[level]))
     }
 
     /// Issue a `MemRequest` to the memory system
