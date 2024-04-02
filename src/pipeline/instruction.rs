@@ -7,7 +7,7 @@ const MASK_21: u32 = 0b111111111111111111111;
 
 pub type RawInstruction = u32;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum Instruction {
     Type0 {
         opcode: u32,

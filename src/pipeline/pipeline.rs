@@ -6,6 +6,8 @@ use crate::pipeline::write_back::PipeLineWriteBack;
 use crate::pipeline::instruction::RawInstruction;
 use anyhow::Result;
 
+use super::instruction::Instruction;
+
 #[derive(Debug, Default)]
 pub struct PipeLine {
     // all the pipeline stages...
@@ -18,22 +20,17 @@ pub struct PipeLine {
     state: InstructionState,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Copy)]
-enum OpCode {
-    Add,
-}
-
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct InstructionState {
-    opcode: Option<OpCode>,
-    value: Option<String>,
-    stall: bool,
+    pub instruction: Option<Instruction>,
+    pub value: Option<String>,
+    pub stall: bool,
 }
 
 impl InstructionState {
     fn new() -> Self {
         InstructionState {
-            opcode: None,
+            instruction: None,
             value: None,
             stall: false,
         }
