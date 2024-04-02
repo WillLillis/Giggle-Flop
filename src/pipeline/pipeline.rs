@@ -1,8 +1,9 @@
-use crate::pipeline::fetch::PipeLineFetch;
 use crate::pipeline::decode::PipeLineDecode;
 use crate::pipeline::execute::PipeLineExecute;
+use crate::pipeline::fetch::PipeLineFetch;
 use crate::pipeline::memory::PipeLineMemory;
 use crate::pipeline::write_back::PipeLineWriteBack;
+use crate::pipeline::instruction::RawInstruction;
 use anyhow::Result;
 
 #[derive(Debug, Default)]
@@ -39,8 +40,36 @@ impl InstructionState {
     }
 }
 
+// TODO: Make a bad ass flow chart, see what information is flowing where, and then code it up
+
 impl PipeLine {
-    fn start(&mut self) -> Result<()> {
-        return self.write_back.write_back(&mut self.state);
+    pub fn start(&mut self) -> Result<()> {
+        self.write_back()
+    }
+
+    fn fetch(&mut self) -> Option<RawInstruction> {
+        todo!()
+    }
+
+    fn decode(&mut self) -> Result<()> {
+    
+        if let Some(instr) = self.fetch() {
+            // do the stuff???
+        }
+
+        todo!()
+    }
+
+    fn execute(&mut self) -> Result<()> {
+        todo!()
+    }
+
+    fn memory(&mut self) -> Result<()> {
+        todo!()
+    }
+
+    fn write_back(&mut self) -> Result<()> {
+        todo!()
     }
 }
+

@@ -259,11 +259,11 @@ impl GiggleFlopUI {
 
             let title_bar = pane_grid::TitleBar::new(title)
                 .padding(10)
-                .style(style::title_bar_focused);
+                .style(style::title_bar_style);
 
             pane_grid::Content::new(self.get_memory_element())
                 .title_bar(title_bar)
-                .style(style::pane_focused)
+                .style(style::pane_style)
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -283,11 +283,11 @@ impl GiggleFlopUI {
 
             let title_bar = pane_grid::TitleBar::new(title)
                 .padding(10)
-                .style(style::title_bar_focused);
+                .style(style::title_bar_style);
 
             pane_grid::Content::new(self.get_register_element())
                 .title_bar(title_bar)
-                .style(style::pane_focused)
+                .style(style::pane_style)
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -307,11 +307,11 @@ impl GiggleFlopUI {
 
             let title_bar = pane_grid::TitleBar::new(title)
                 .padding(10)
-                .style(style::title_bar_focused);
+                .style(style::title_bar_style);
 
             pane_grid::Content::new(self.get_code_element())
                 .title_bar(title_bar)
-                .style(style::pane_focused)
+                .style(style::pane_style)
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -344,17 +344,7 @@ mod style {
     use iced::widget::container;
     use iced::{Border, Theme};
 
-    pub fn title_bar_active(theme: &Theme) -> container::Style {
-        let palette = theme.extended_palette();
-
-        container::Style {
-            text_color: Some(palette.background.strong.text),
-            background: Some(palette.background.strong.color.into()),
-            ..Default::default()
-        }
-    }
-
-    pub fn title_bar_focused(theme: &Theme) -> container::Style {
+    pub fn title_bar_style(theme: &Theme) -> container::Style {
         let palette = theme.extended_palette();
 
         container::Style {
@@ -364,21 +354,7 @@ mod style {
         }
     }
 
-    pub fn pane_active(theme: &Theme) -> container::Style {
-        let palette = theme.extended_palette();
-
-        container::Style {
-            background: Some(palette.background.weak.color.into()),
-            border: Border {
-                width: 2.0,
-                color: palette.background.strong.color,
-                ..Border::default()
-            },
-            ..Default::default()
-        }
-    }
-
-    pub fn pane_focused(theme: &Theme) -> container::Style {
+    pub fn pane_style(theme: &Theme) -> container::Style {
         let palette = theme.extended_palette();
 
         container::Style {
