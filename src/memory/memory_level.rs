@@ -54,6 +54,13 @@ impl MemoryLevel {
         }
     }
 
+
+    // for testing/ debugging, get rid of later (TODO:)
+    pub fn force_store(&mut self, address: usize, data: MemBlock) {
+        let idx = self.address_index(address);
+        self.contents[idx].write(address, data);
+    }
+
     /// Issues a new load request, or checks the status of an existing (matching)
     /// load request
     pub fn load(&mut self, req: &LoadRequest) -> MemResponse {
@@ -91,7 +98,7 @@ impl MemoryLevel {
 
     /// Returns the index of the internal Vec of `MemLine`s that would contain
     /// the supplied `address`
-    fn address_index(&self, address: usize) -> usize {
+    pub fn address_index(&self, address: usize) -> usize {
         (address / (self.line_len * MEM_BLOCK_WIDTH)) % self.num_lines()
     }
 

@@ -17,14 +17,14 @@ impl PipelineExecute {
         // if branch -> check condition, set flag, calculate target address
         // if memory -> do address calculation 
         // call decode with blocked status from memory
-        if instr.stall {
-            // call decode?
-        }
-        if instr.instruction == None {
-            panic!("this shouldnt happen probably")
-        }
-        let instruction = instr.instruction.unwrap();
-        // check ops here idk how
+        // if instr.stall {
+        //     // call decode?
+        // }
+        // if instr.instruction == None {
+        //     panic!("this shouldnt happen probably")
+        // }
+        // let instruction = instr.instruction.unwrap();
+        // // check ops here idk how
         Ok(())
         // if memory not blocked -> return instruction object to memory with result
         // if memory blocked -> return noop/stall

@@ -4,7 +4,7 @@ use crate::memory::memory_system::MemWidth;
 const MASK_1: u32 = 0b1;
 const MASK_2: u32 = 0b11;
 const MASK_3: u32 = 0b111;
-const MASK_4: u32 = 0b11111;
+const MASK_4: u32 = 0b1111;
 const MASK_21: u32 = 0b111111111111111111111;
 
 pub type RawInstruction = u32;
@@ -144,6 +144,7 @@ impl Instruction {
                 0 | 3 => Some(MemWidth::Bits8),
                 1 | 4 => Some(MemWidth::Bits16),
                 2 | 5 => Some(MemWidth::Bits32),
+                _ => None,
             },
             Instruction::Type4 {
                 opcode,
@@ -153,6 +154,7 @@ impl Instruction {
                 0 | 3 | 6 => Some(MemWidth::Bits8),
                 1 | 4 | 7 => Some(MemWidth::Bits16),
                 2 | 5 | 8 => Some(MemWidth::Bits32),
+                _ => None,
             },
         }
     }
@@ -165,13 +167,13 @@ impl From<u32> for Instruction {
         // type field is always 3 bits
         // get first three bits
         let instr_type = value & MASK_3;
-        value <<= 3;
+        value >>= 3;
         // switch type off of that
         match instr_type {
             0 => {
                 // opcode takes one bit
                 let opcode = value & MASK_1;
-                // value <<= 1;
+                // value >>= 1;
 
                 // 28 remaining bits of padding to ignore
 
@@ -180,11 +182,11 @@ impl From<u32> for Instruction {
             1 => {
                 // opcode takes four bits
                 let opcode = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // immediate argument takes 21 bits
                 let immediate = value & MASK_21;
-                // value <<= 21;
+                // value >>= 21;
                 // 4 remaining bits of padding to ignore
 
                 Instruction::Type1 { opcode, immediate }
@@ -192,15 +194,15 @@ impl From<u32> for Instruction {
             2 => {
                 // opcode takes three bits
                 let opcode = value & MASK_3;
-                value <<= 3;
+                value >>= 3;
 
                 // general register 1 argument takes 4 bits
                 let reg_1 = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // general register 2 argument takes 4 bits
                 let reg_2 = value & MASK_4;
-                // value <<= 4;
+                // value >>= 4;
                 // 18 remaining bits of padding to ignore
 
                 Instruction::Type2 {
@@ -212,15 +214,15 @@ impl From<u32> for Instruction {
             3 => {
                 // opcode takes one bit
                 let opcode = value & MASK_1;
-                value <<= 1;
+                value >>= 1;
 
                 // floating point register 1 argument takes 4 bits
                 let freg_1 = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // floating point register 2 argument takes 4 bits
                 let freg_2 = value & MASK_4;
-                // value <<= 4;
+                // value >>= 4;
                 // 20 remaining bits of padding to ignore
 
                 Instruction::Type3 {
@@ -232,15 +234,15 @@ impl From<u32> for Instruction {
             4 => {
                 // opcode takes four bits
                 let opcode = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // general register argument takes 4 bits
                 let reg_1 = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // immediate argument takes 21 bits
                 let immediate = value & MASK_21;
-                // value <<= 21;
+                // value >>= 21;
                 // 0 remaining bits of padding
 
                 Instruction::Type4 {
@@ -252,19 +254,19 @@ impl From<u32> for Instruction {
             5 => {
                 // opcode takes four bits
                 let opcode = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // general register 1 argument takes 4 bits
                 let reg_1 = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // general register 2 argument takes 4 bits
                 let reg_2 = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // general register 2 argument takes 4 bits
                 let reg_3 = value & MASK_4;
-                // value <<= 4;
+                // value >>= 4;
                 // 13 remaining bits of padding to ignore
 
                 Instruction::Type5 {
@@ -277,19 +279,19 @@ impl From<u32> for Instruction {
             6 => {
                 // opcode takes two bits
                 let opcode = value & MASK_2;
-                value <<= 4;
+                value >>= 4;
 
                 // general register 1 argument takes 4 bits
                 let freg_1 = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // general register 2 argument takes 4 bits
                 let freg_2 = value & MASK_4;
-                value <<= 4;
+                value >>= 4;
 
                 // general register 2 argument takes 4 bits
                 let freg_3 = value & MASK_4;
-                // value <<= 4;
+                // value >>= 4;
                 // 15 remaining bits of padding to ignore
 
                 Instruction::Type6 {

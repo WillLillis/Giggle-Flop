@@ -1,5 +1,3 @@
-use std::intrinsics::unreachable;
-
 use crate::common::PipelineStage;
 use crate::execution::execution_state::ExecutionState;
 use crate::memory::memory_system::{LoadRequest, MemRequest, MemResponse, Memory};
@@ -43,10 +41,19 @@ impl System {
     // For debugging purposes, will need to make this
     // configurable later...
     pub fn default() -> Self {
+        let mut memory_system = Memory::new(4, &[32, 64], &[1, 2]);
+        // Load up a sample program
+        // we will simply add two numbers inside two registers 
+        let add_instr = 0b00000000000000011001000010001101;
+        let tmp_instr = Instruction::from(add_instr);
+        println!("HEY RIGHT HERE {:?}", tmp_instr);
+        memory_system.force_store(0, MemBlock::Bits32(add_instr));
+
         Self {
             clock: 0,
             pipeline: PipeLine::default(),
-            memory_system: Memory::new(4, &[32, 64], &[1, 5]),
+            // memory_system: Memory::new(4, &[32, 64], &[1, 5]),
+            memory_system,
             registers: RegisterSet::new(),
             execution_state: ExecutionState::default(),
             fetch: PipelineFetch::default(),
@@ -106,10 +113,8 @@ impl System {
 
     fn pipeline_decode(&mut self, execute_blocked: bool, memory_blocked: bool) -> InstructionState {
         match self.pipeline_fetch() {
-            Some(instr) => {
-                Some(Instruction::from(instr))
-            },
-            None => None
+            Some(instr) => Some(Instruction::from(instr)),
+            None => None,
         }
     }
 
@@ -178,7 +183,11 @@ impl System {
                                 // TODO: Check if unsigned, signed, or float result, set execute's
                                 // value accordingly
                                 // let mem_type = self.execute.instruction.get_mem_type();
-                                let val = load_resp.data.get_contents(immediate as usize).unwrap().get_data();
+                                let val = load_resp
+                                    .data
+                                    .get_contents(immediate as usize)
+                                    .unwrap()
+                                    .get_data();
                                 self.execute.instruction.val =
                                     Some(InstructionResult::UnsignedIntegerResult {
                                         dest: reg_1 as usize,
@@ -236,8 +245,6 @@ impl System {
             // if instruction is load/store ->
             //          if cache returns wait -> return to write_back with noop/stall
             //          if cache returns value -> put value in instruction result and return to write_back
-        }
-
     }
 
     fn pipeline_write_back(&mut self) {
@@ -273,5 +280,10 @@ impl System {
             self.write_back.instruction = self.pipeline_memory();
         }
         // return to clock
+    }
+
+    pub fn step(&mut self) {
+        self.pipeline_start();
+        self.clock += 1;
     }
 }

@@ -36,6 +36,7 @@ enum Message {
     Scrolled(scrollable::Viewport),
     SelectMemoryLevel(usize),
     SelectRegisterGroup(RegisterGroup),
+    AdvanceClock,
     // maybe delete
     Clicked(pane_grid::Pane),
     Dragged(pane_grid::DragEvent),
@@ -98,6 +99,10 @@ impl GiggleFlopUI {
                 self.current_register_group = group;
                 Command::none()
             }
+            Message::AdvanceClock => {
+                self.system.step();
+                Command::none()
+            }
             Message::Clicked(pane) => {
                 self.focus = Some(pane);
                 Command::none()
@@ -116,9 +121,16 @@ impl GiggleFlopUI {
 
     fn get_code_element(&self) -> Element<Message> {
         let scrollable_content: Element<Message> = Element::from({
+            let step_button = || {
+                button("Click to advance")
+                    .padding(10)
+                    .on_press(Message::AdvanceClock)
+            };
+            let code_text = format!("TODO: Code goes here...Clock: {}", self.system.clock);
             Scrollable::with_direction(
                 row![
-                    column![text("TODO: Code goes here..."),]
+                    //column![text("TODO: Code goes here..."), step_button()]
+                    column![text(code_text), step_button()]
                         .align_items(Alignment::Center)
                         .padding([0, 0, 0, 0])
                         .spacing(40),
@@ -326,7 +338,9 @@ impl GiggleFlopUI {
             .padding(10)
             .into();
 
-        row![column![register_pane, memory_pane], code_pane].into()
+
+
+        row![column![register_pane, memory_pane], column![code_pane]].into()
     }
 
     fn theme(&self) -> Theme {

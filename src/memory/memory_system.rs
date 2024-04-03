@@ -129,6 +129,14 @@ impl Memory {
         mem
     }
 
+    // for testing/ debugging, get rid of later (TODO:)
+    /// Manually set the values of an individual address to main memory
+    pub fn force_store(&mut self, address: usize, data: MemBlock) {
+        let main_level_idx = self.num_levels() - 1;
+        let addr_idx = self.levels[main_level_idx].address_index(address);
+        self.levels[main_level_idx].force_store(address, data);
+    }
+
     #[allow(dead_code)]
     // Remove if necessary
     /// Returns the number of bits in the provided memory level
