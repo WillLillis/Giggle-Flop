@@ -9,6 +9,17 @@ pub enum MemBlock {
     Bits32(u32),
 }
 
+impl MemBlock {
+    // TODO: Fix this interface...
+    pub fn get_data(&self) -> u32 {
+        match self {
+            &MemBlock::Bits8(data) => data as u32,
+            &MemBlock::Bits16(data) => data as u32,
+            &MemBlock::Bits32(data) => data,
+        }
+    }
+}
+
 impl Default for MemBlock {
     fn default() -> Self {
         Self::Bits8(0u8)

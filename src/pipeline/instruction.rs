@@ -1,3 +1,5 @@
+use crate::memory::memory_system::MemWidth;
+
 // hey a new file
 const MASK_1: u32 = 0b1;
 const MASK_2: u32 = 0b11;
@@ -6,6 +8,28 @@ const MASK_4: u32 = 0b11111;
 const MASK_21: u32 = 0b111111111111111111111;
 
 pub type RawInstruction = u32;
+
+#[derive(Debug)]
+pub enum InstructionResult {
+    UnsignedIntegerResult { dest: usize, val: u32 },
+    IntegerResult { dest: usize, val: i32 },
+    FloatResult { dest: usize, val: f32 },
+    AddressResult { addr: u32 },
+}
+
+#[derive(Debug)]
+pub enum MemType {
+    Unsigned,
+    Signed,
+    Float,
+}
+
+#[derive(Debug, Default)]
+pub struct InstructionState {
+    pub instr: Option<Instruction>,
+    pub val: Option<InstructionResult>,
+    pub stall: bool,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum Instruction {
@@ -43,6 +67,86 @@ pub enum Instruction {
         freg_2: u32,
         freg_3: u32,
     }, // Three floating point register arguments
+}
+
+impl Instruction {
+    pub fn is_mem_instr(&self) -> bool {
+        match self {
+            Instruction::Type0 { opcode } => *opcode == 0,
+            Instruction::Type1 { .. } | Instruction::Type4 { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_load_instr(&self) -> bool {
+        match self {
+            Instruction::Type4 { opcode, .. } => (0..=5).contains(opcode),
+            _ => false,
+        }
+    }
+
+    pub fn is_alu_instr(&self) -> bool {
+        match self {
+            Instruction::Type0 { .. } | Instruction::Type1 { .. } => false,
+            Instruction::Type2 { opcode, .. } => match opcode {
+                0 | 1 | 2 => true,
+                _ => false,
+            },
+            Instruction::Type3 { .. } => true,
+            Instruction::Type4 { opcode, .. } => match opcode {
+                9 => true,
+                _ => false,
+            },
+            Instruction::Type5 { .. } | Instruction::Type6 { .. } => true,
+        }
+    }
+
+    // TODO: Implement this once we fix loading instructions
+    // pub fn get_load_type(&self) -> Option<MemType> {
+    //     match self {
+    //         Instruction::Type0 { .. } | Instruction::Type1 { .. } | Instruction::Type3 {..}  => None,
+    //         Instruction::Type2 { opcode, ..} => {
+    //             match opcode {
+    //                 3|4|5 => Some(MemType::Unsigned),
+    //                 _ => None
+    //             }
+    //         }
+    //         Instruction::Type4 { opcode, ..} => {
+    //             match opcode {
+    //                 0|1|2 => Some(MemType::Unsigned),
+    //                 _ => None,
+    //             }
+    //         }
+    //     }
+    // }
+
+    pub fn get_mem_width(&self) -> Option<MemWidth> {
+        match self {
+            Instruction::Type0 { .. }
+            | Instruction::Type1 { .. }
+            | Instruction::Type3 { .. }
+            | Instruction::Type5 { .. }
+            | Instruction::Type6 { .. } => None,
+            Instruction::Type2 {
+                opcode,
+                reg_1,
+                reg_2,
+            } => match opcode {
+                0 | 3 => Some(MemWidth::Bits8),
+                1 | 4 => Some(MemWidth::Bits16),
+                2 | 5 => Some(MemWidth::Bits32),
+            },
+            Instruction::Type4 {
+                opcode,
+                reg_1,
+                immediate,
+            } => match opcode {
+                0 | 3 | 6 => Some(MemWidth::Bits8),
+                1 | 4 | 7 => Some(MemWidth::Bits16),
+                2 | 5 | 8 => Some(MemWidth::Bits32),
+            },
+        }
+    }
 }
 
 impl From<u32> for Instruction {
@@ -89,8 +193,12 @@ impl From<u32> for Instruction {
                 let reg_2 = value & MASK_4;
                 // value <<= 4;
                 // 18 remaining bits of padding to ignore
-                
-                Instruction::Type2 { opcode, reg_1, reg_2 }
+
+                Instruction::Type2 {
+                    opcode,
+                    reg_1,
+                    reg_2,
+                }
             }
             3 => {
                 // opcode takes one bit
@@ -106,7 +214,11 @@ impl From<u32> for Instruction {
                 // value <<= 4;
                 // 20 remaining bits of padding to ignore
 
-                Instruction::Type3 { opcode, freg_1, freg_2 }
+                Instruction::Type3 {
+                    opcode,
+                    freg_1,
+                    freg_2,
+                }
             }
             4 => {
                 // opcode takes four bits
@@ -121,8 +233,12 @@ impl From<u32> for Instruction {
                 let immediate = value & MASK_21;
                 // value <<= 21;
                 // 0 remaining bits of padding
-                
-                Instruction::Type4 { opcode, reg_1, immediate }
+
+                Instruction::Type4 {
+                    opcode,
+                    reg_1,
+                    immediate,
+                }
             }
             5 => {
                 // opcode takes four bits
@@ -136,13 +252,18 @@ impl From<u32> for Instruction {
                 // general register 2 argument takes 4 bits
                 let reg_2 = value & MASK_4;
                 value <<= 4;
-                
+
                 // general register 2 argument takes 4 bits
                 let reg_3 = value & MASK_4;
                 // value <<= 4;
                 // 13 remaining bits of padding to ignore
 
-                Instruction::Type5 { opcode, reg_1, reg_2, reg_3 }
+                Instruction::Type5 {
+                    opcode,
+                    reg_1,
+                    reg_2,
+                    reg_3,
+                }
             }
             6 => {
                 // opcode takes two bits
@@ -156,13 +277,18 @@ impl From<u32> for Instruction {
                 // general register 2 argument takes 4 bits
                 let freg_2 = value & MASK_4;
                 value <<= 4;
-                
+
                 // general register 2 argument takes 4 bits
                 let freg_3 = value & MASK_4;
                 // value <<= 4;
                 // 15 remaining bits of padding to ignore
 
-                Instruction::Type6 { opcode, freg_1, freg_2, freg_3 }
+                Instruction::Type6 {
+                    opcode,
+                    freg_1,
+                    freg_2,
+                    freg_3,
+                }
             }
             x => {
                 panic!("Invalid instruction type field: {x}")

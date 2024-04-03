@@ -1,11 +1,11 @@
 use anyhow::Result;
-use crate::pipeline::pipeline::InstructionState;
+use crate::pipeline::pipeline::PipelineState;
 
 #[derive(Debug, Default)]
-pub struct PipeLineFetch {}
+pub struct PipelineFetch {}
 
-impl PipeLineFetch {
-    fn fetch(instr: &mut InstructionState) -> Result<()> {
+impl PipelineFetch {
+    fn fetch(instr: &mut PipelineState) -> Result<()> {
         // if no current instruction -> send load to cache with PC as address
         //      if cache returns value -> set current instruction
         // if current instruction & decode not blocked -> return instruction, increment PC

@@ -1,10 +1,10 @@
-use crate::pipeline::pipeline::InstructionState;
+use crate::pipeline::pipeline::PipelineState;
 use anyhow::Result;
 
 #[derive(Debug, Default)]
-pub struct PipeLineDecode {}
+pub struct PipelineDecode {}
 
-impl PipeLineDecode {
+impl PipelineDecode {
     pub fn decode(instr: Option<u32>) -> Result<()> {
         // split instruction into fields
         // if source regs not pending -> get values, create instruction object

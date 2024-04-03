@@ -1,38 +1,41 @@
-use crate::pipeline::decode::PipeLineDecode;
-use crate::pipeline::execute::PipeLineExecute;
-use crate::pipeline::fetch::PipeLineFetch;
-use crate::pipeline::memory::PipeLineMemory;
-use crate::pipeline::write_back::PipeLineWriteBack;
-use crate::pipeline::instruction::RawInstruction;
-use anyhow::Result;
+use std::collections::HashSet;
 
-use super::instruction::Instruction;
+use crate::pipeline::decode::PipelineDecode;
+use crate::pipeline::execute::PipelineExecute;
+use crate::pipeline::fetch::PipelineFetch;
+use crate::pipeline::memory::PipelineMemory;
+use crate::pipeline::write_back::PipelineWriteBack;
+use crate::pipeline::instruction::RawInstruction;
+use crate::register::register_system::RegisterGroup;
+use anyhow::Result;
 
 #[derive(Debug, Default)]
 pub struct PipeLine {
     // all the pipeline stages...
-    fetch: PipeLineFetch,
-    decode: PipeLineDecode,
-    execute: PipeLineExecute,
-    memory: PipeLineMemory,
-    write_back: PipeLineWriteBack,
+    fetch: PipelineFetch,
+    decode: PipelineDecode,
+    execute: PipelineExecute,
+    memory: PipelineMemory,
+    write_back: PipelineWriteBack,
     // for shared state between stages if necessary...
-    state: InstructionState,
+    state: PipelineState,
 }
 
-#[derive(Default, Debug, Clone, Eq, PartialEq)]
-pub struct InstructionState {
-    pub instruction: Option<Instruction>,
-    pub value: Option<String>,
-    pub stall: bool,
+#[derive(Default, Debug, Clone)]
+pub struct PipelineState {
+    // pub instruction: Option<Instruction>,
+    // pub value: Option<String>,
+    // pub stall: bool,
+    pending_regs: HashSet<(RegisterGroup, usize)>,
 }
 
-impl InstructionState {
+impl PipelineState {
     fn new() -> Self {
-        InstructionState {
-            instruction: None,
-            value: None,
-            stall: false,
+        PipelineState {
+            // instruction: None,
+            // value: None,
+            // stall: false,
+            pending_regs: HashSet::new(),
         }
     }
 }
@@ -40,33 +43,5 @@ impl InstructionState {
 // TODO: Make a bad ass flow chart, see what information is flowing where, and then code it up
 
 impl PipeLine {
-    pub fn start(&mut self) -> Result<()> {
-        self.write_back()
-    }
-
-    fn fetch(&mut self) -> Option<RawInstruction> {
-        todo!()
-    }
-
-    fn decode(&mut self) -> Result<()> {
-    
-        if let Some(instr) = self.fetch() {
-            // do the stuff???
-        }
-
-        todo!()
-    }
-
-    fn execute(&mut self) -> Result<()> {
-        todo!()
-    }
-
-    fn memory(&mut self) -> Result<()> {
-        todo!()
-    }
-
-    fn write_back(&mut self) -> Result<()> {
-        todo!()
-    }
 }
 

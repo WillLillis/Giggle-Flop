@@ -30,6 +30,16 @@ impl MemLine {
         self.start_addr
     }
 
+    /// Returns the contents stored at `address`
+    pub fn get_contents(&self, address: usize) -> Option<MemBlock> {
+        if !self.contains_address(address) {
+            None
+        } else {
+            let idx = (address - self.start_addr.unwrap()) / MEM_BLOCK_WIDTH;
+            Some(self.data[idx])
+        }
+    }
+
     /// Indicates whether the given `adress` is contained within the memory
     /// line
     pub fn contains_address(&self, address: usize) -> bool {

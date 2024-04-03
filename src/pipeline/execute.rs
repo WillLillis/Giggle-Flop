@@ -1,13 +1,15 @@
 use anyhow::Result;
-use crate::pipeline::pipeline::InstructionState;
+use crate::pipeline::pipeline::PipelineState;
 
-use super::{decode, instruction::Instruction};
+use super::{decode, instruction::{Instruction, InstructionState}};
 
 #[derive(Debug, Default)]
-pub struct PipeLineExecute {}
+pub struct PipelineExecute {
+    pub instruction: InstructionState,
+}
 
-impl PipeLineExecute {
-    fn execute(instr: &mut InstructionState) -> Result<()> {
+impl PipelineExecute {
+    fn execute(instr: &mut PipelineState) -> Result<()> {
         // if noop -> do nothing
         // if ALU op -> do op
         // if jump -> get address

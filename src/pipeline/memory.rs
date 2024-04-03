@@ -1,11 +1,15 @@
 use anyhow::Result;
-use crate::pipeline::pipeline::InstructionState;
+use crate::pipeline::pipeline::PipelineState;
+
+use super::instruction::InstructionState;
 
 #[derive(Debug, Default)]
-pub struct PipeLineMemory {}
+pub struct PipelineMemory {
+    pub instruction: InstructionState
+}
 
-impl PipeLineMemory {
-    fn memory(instr: &mut InstructionState) -> Result<()> {
+impl PipelineMemory {
+    fn memory(instr: &mut PipelineState) -> Result<()> {
         // if noop/nonmem instruction -> do nothing
         // if load -> call cache
         // in cache -> if hit and no delay -> cache returns value

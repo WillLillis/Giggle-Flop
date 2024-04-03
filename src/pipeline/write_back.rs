@@ -1,12 +1,15 @@
 use anyhow::Result;
-use crate::pipeline::pipeline::InstructionState;
+use crate::pipeline::pipeline::PipelineState;
+use crate::pipeline::instruction::InstructionState;
 
 #[derive(Debug, Default)]
-pub struct PipeLineWriteBack {}
+pub struct PipelineWriteBack {
+    pub instruction: InstructionState,
+}
 
-impl PipeLineWriteBack {
+impl PipelineWriteBack {
     // clock calls write-back
-    pub fn write_back(&self, instr: &mut InstructionState) -> Result<()> {
+    pub fn write_back(&self, instr: &mut PipelineState) -> Result<()> {
         // if saved instruction has result -> write to reg, update pending regs
         // if W has branch -> update PC
         // if jump subroutine -> update PC and return reg
