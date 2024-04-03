@@ -88,7 +88,7 @@ impl Instruction {
     pub fn is_store_instr(&self) -> bool {
         match self {
             Instruction::Type4 { opcode, .. } => {
-                return opcode == 6 | 7 | 8;
+                return *opcode == 6 || *opcode == 7 || *opcode == 8;
             },
             _ => false,
         }

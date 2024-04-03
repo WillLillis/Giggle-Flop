@@ -1,7 +1,6 @@
 use crate::common::PipelineStage;
 use crate::execution::execution_state::ExecutionState;
-use crate::memory::memory_system::{LoadRequest, MemRequest, MemResponse, Memory};
-use crate::memory::{MemResponse, MemWidth};
+use crate::memory::memory_system::{LoadRequest, MemRequest, MemResponse, MemWidth, Memory, StoreRequest};
 use crate::pipeline::execute::PipelineExecute;
 use crate::pipeline::instruction::{
     Instruction, InstructionResult, InstructionState, RawInstruction,
@@ -119,10 +118,13 @@ impl System {
         // if instruction has operands and execute not blocked -> put dest register in pending, return instruction object to E
         // if instruction missing operands or execute blocked-> return noop/stall
         // save instruction from fetch as next instruction
-        match self.pipeline_fetch() {
-            Some(instr) => Some(Instruction::from(instr)),
-            None => None,
-        }
+        // TODO: Check if decode is blocked
+        let state = self.pipeline_fetch(false, execute_blocked);
+        state
+        // match self.pipeline_fetch() {
+        //     Some(instr) => Some(Instruction::from(instr)),
+        //     None => None,
+        // }
     }
 
     fn pipeline_execute(&mut self, memory_blocked: bool) -> InstructionState {
@@ -218,11 +220,16 @@ impl System {
                         ..
                     } = instr
                     {
+                        let data = if let InstructionResult::AddressResult { addr } = self.memory.instruction.val.unwrap() {
+                            MemBlock::Bits32(addr)
+                        } else {
+                            panic!("Bad result");
+                        };
                         // destructure to grab immediate field
                         let request = MemRequest::Store(StoreRequest {
                             issuer: PipelineStage::Memory,
                             address: immediate as usize,
-                            data: self.memory.instruction.val,
+                            data,
                         });
                         let resp = self.memory_system.request(&request).unwrap();
                         match resp {
@@ -234,7 +241,7 @@ impl System {
                                 // if value returned -> call execute with not blocked
                                 exec_instr = Some(self.pipeline_execute(false));
                             }
-                            MemResponse::Miss | MemResponse::Load => unreachable!(),
+                            MemResponse::Miss | MemResponse::Load(_) => unreachable!(),
                         }
                     }
                 }
