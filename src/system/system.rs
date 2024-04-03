@@ -1,7 +1,7 @@
 use crate::common::PipelineStage;
 use crate::execution::execution_state::ExecutionState;
 use crate::memory::memory_system::{LoadRequest, MemRequest, MemResponse, Memory};
-use crate::memory::MemWidth;
+use crate::memory::{MemResponse, MemWidth};
 use crate::pipeline::execute::PipelineExecute;
 use crate::pipeline::instruction::{
     Instruction, InstructionResult, InstructionState, RawInstruction,
@@ -106,12 +106,19 @@ impl System {
         }
         // if current instruction & decode not blocked -> return instruction, increment PC
         if self.fetch.instruction.instr != None && !decode_blocked {
-            self.registers.program_counter += 1;
+            self.registers.program_counter += 32;
         }
         return self.fetch.instruction
     }
 
     fn pipeline_decode(&mut self, execute_blocked: bool, memory_blocked: bool) -> InstructionState {
+        // split instruction into fields
+        // if source regs not pending -> get values, create instruction object
+        //      call fetch with blocked status from execute
+        // if register values pending -> call fetch with blocked
+        // if instruction has operands and execute not blocked -> put dest register in pending, return instruction object to E
+        // if instruction missing operands or execute blocked-> return noop/stall
+        // save instruction from fetch as next instruction
         match self.pipeline_fetch() {
             Some(instr) => Some(Instruction::from(instr)),
             None => None,
@@ -144,6 +151,7 @@ impl System {
 
     // BUG: Where do we return the instruction to writeback???
     fn pipeline_memory(&mut self) -> InstructionState {
+        let mut exec_instr: Option<InstructionState> = None;
         // if noop/nonmem instruction -> do nothing
         if let Some(instr) = self.memory.instruction.instr {
             if instr.is_mem_instr() {
@@ -176,7 +184,7 @@ impl System {
                         // else call execute with blocked
                         match resp {
                             MemResponse::Miss | MemResponse::Wait => {
-                                self.pipeline_execute(true);
+                                exec_instr = Some(self.pipeline_execute(true));
                             }
                             MemResponse::Load(load_resp) => {
                                 // if value returned -> call execute with not blocked
@@ -193,7 +201,7 @@ impl System {
                                         dest: reg_1 as usize,
                                         val,
                                     });
-                                self.pipeline_execute(false);
+                                    exec_instr = Some(self.pipeline_execute(false));
                             }
                             MemResponse::Store => unreachable!(),
                         }
@@ -220,31 +228,27 @@ impl System {
                         match resp {
                             MemResponse::Wait => {
                                 self.execute.instruction.stall = true;
-                                self.pipeline_execute(true)
+                                exec_instr = Some(self.pipeline_execute(true));
                             }
                             MemResponse::Store => {
                                 // if value returned -> call execute with not blocked
-                                // TODO: Check if unsigned, signed, or float result, set execute's
-                                // value accordingly
-                                // let mem_type = self.execute.instruction.get_mem_type();
-                                let val = load_resp.data.get_contents(immediate as usize).unwrap().get_data();
-                                self.execute.instruction.val =
-                                    Some(InstructionResult::UnsignedIntegerResult {
-                                        dest: reg_1 as usize,
-                                        val,
-                                    });
-                                self.pipeline_execute(false);
+                                exec_instr = Some(self.pipeline_execute(false));
                             }
                             MemResponse::Miss | MemResponse::Load => unreachable!(),
                         }
+                    }
                 }
             } else {
                 // do nothing
             }
-            // if instruction isnt load/store -> return to write_back forwarding instruction
-            // if instruction is load/store ->
-            //          if cache returns wait -> return to write_back with noop/stall
-            //          if cache returns value -> put value in instruction result and return to write_back
+            if let Some(instruction) = exec_instr {
+                // if instruction isnt load/store -> return to write_back forwarding instruction
+                // if instruction is load/store ->
+                //          if cache returns wait -> return to write_back with noop/stall
+                //          if cache returns value -> put value in instruction result and return to write_back
+            }
+            
+        }
     }
 
     fn pipeline_write_back(&mut self) {
