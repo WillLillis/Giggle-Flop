@@ -82,7 +82,7 @@ impl System {
                 MemResponse::Miss | MemResponse::Wait => {
                     // return noop/stall
                     self.fetch.instruction.stall = true;
-                    return self.fetch.instruction;
+                    return self.fetch.instruction.clone();
                 }
                 MemResponse::Load(load_resp) => {
                     // if cache returns value -> set current instruction
@@ -107,7 +107,7 @@ impl System {
         if self.fetch.instruction.instr != None && !decode_blocked {
             self.registers.program_counter += 32;
         }
-        return self.fetch.instruction
+        return self.fetch.instruction.clone()
     }
 
     fn pipeline_decode(&mut self, execute_blocked: bool, memory_blocked: bool) -> InstructionState {
@@ -148,6 +148,7 @@ impl System {
         // if memory not blocked -> return instruction object to memory with result
         // if memory blocked -> return noop/stall
         // save instruction from decode as next instruction
+        // self.execute.instruction = self.decode.instruction;
         todo!()
     }
 
@@ -220,8 +221,8 @@ impl System {
                         ..
                     } = instr
                     {
-                        let data = if let InstructionResult::AddressResult { addr } = self.memory.instruction.val.unwrap() {
-                            MemBlock::Bits32(addr)
+                        let data = if let InstructionResult::AddressResult { ref addr } = self.memory.instruction.val.as_ref().unwrap() {
+                            MemBlock::Bits32(addr.clone())
                         } else {
                             panic!("Bad result");
                         };
@@ -249,13 +250,95 @@ impl System {
                 // do nothing
             }
             if let Some(instruction) = exec_instr {
-                // if instruction isnt load/store -> return to write_back forwarding instruction
-                // if instruction is load/store ->
-                //          if cache returns wait -> return to write_back with noop/stall
-                //          if cache returns value -> put value in instruction result and return to write_back
+                if let Some(exec_instr) = instruction.instr {
+                    // if instruction isnt load/store -> return to write_back forwarding instruction
+                    if !exec_instr.is_mem_instr() {
+                        return instruction;
+                    } else {
+                        // if instruction is load/store ->
+                        //      if cache returns wait -> return to write_back with noop/stall
+                        //      if cache returns value -> put value in instruction result and return to write_back
+                        if exec_instr.is_load_instr() {
+                            let width = exec_instr.get_mem_width().unwrap();
+                            // TODO: also support Type 2 loads
+                            if let Instruction::Type4 {
+                                opcode,
+                                reg_1,
+                                immediate,
+                                ..
+                            } = exec_instr
+                            {
+                                // destructure to grab immediate field
+                                let request = MemRequest::Load(LoadRequest {
+                                    issuer: PipelineStage::Memory,
+                                    address: immediate as usize,
+                                    width,
+                                });
+                                let resp = self.memory_system.request(&request).unwrap();
+                                match resp {
+                                    MemResponse::Miss | MemResponse::Wait => {
+                                        self.memory.instruction.stall = true;
+                                        return self.memory.instruction.clone();
+                                    }
+                                    MemResponse::Load(load_resp) => {
+                                        // TODO: Check if unsigned, signed, or float result, set execute's
+                                        // value accordingly
+                                        // let mem_type = self.execute.instruction.get_mem_type();
+                                        let val = load_resp
+                                            .data
+                                            .get_contents(immediate as usize)
+                                            .unwrap()
+                                            .get_data();
+                                        self.memory.instruction.val =
+                                            Some(InstructionResult::UnsignedIntegerResult {
+                                                dest: reg_1 as usize,
+                                                val,
+                                            });
+                                        return self.memory.instruction.clone();
+                                    }
+                                    MemResponse::Store => unreachable!(),
+                                }
+                            }
+                        }
+                        if exec_instr.is_store_instr() {
+                            // TODO: width is prob still relevant idk where tho
+                            let width = exec_instr.get_mem_width().unwrap();
+                            if let Instruction::Type4 {
+                                opcode,
+                                reg_1,
+                                immediate,
+                                ..
+                            } = instr
+                            {
+                                let data = if let InstructionResult::AddressResult { addr } = instruction.val.unwrap() {
+                                    MemBlock::Bits32(addr)
+                                } else {
+                                    panic!("Bad result");
+                                };
+                                // destructure to grab immediate field
+                                let request = MemRequest::Store(StoreRequest {
+                                    issuer: PipelineStage::Memory,
+                                    address: immediate as usize,
+                                    data,
+                                });
+                                let resp = self.memory_system.request(&request).unwrap();
+                                match resp {
+                                    MemResponse::Wait => {
+                                        self.memory.instruction.stall = true;
+                                        return self.memory.instruction.clone();
+                                    }
+                                    MemResponse::Store => {
+                                        return self.memory.instruction.clone();
+                                    }
+                                    MemResponse::Miss | MemResponse::Load(_) => unreachable!(),
+                                }
+                            } 
+                        }
+                    }
+                }
             }
-            
         }
+        return self.memory.instruction.clone();
     }
 
     fn pipeline_write_back(&mut self) {
