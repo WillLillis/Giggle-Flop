@@ -1,8 +1,12 @@
 use crate::pipeline::pipeline::PipelineState;
 use anyhow::Result;
 
+use super::instruction::InstructionState;
+
 #[derive(Debug, Default)]
-pub struct PipelineDecode {}
+pub struct PipelineDecode {
+    pub instruction: InstructionState,
+}
 
 impl PipelineDecode {
     pub fn decode(instr: Option<u32>) -> Result<()> {
