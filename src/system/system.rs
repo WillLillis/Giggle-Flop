@@ -43,9 +43,13 @@ impl System {
         let mut memory_system = Memory::new(4, &[32, 64], &[1, 2]);
         // Load up a sample program
         // we will simply add two numbers inside two registers 
+        memory_system.force_store(128, MemBlock::Bits32(1));
+        let load_instr = 0b00000000000001000000000010010100;
         let add_instr = 0b00000000000000011001000010001101;
-        let tmp_instr = Instruction::from(add_instr);
-        println!("HEY RIGHT HERE {:?}", tmp_instr);
+        let tmp_add_instr = Instruction::from(add_instr);
+        let tmp_load_instr = Instruction::from(load_instr);
+        println!("HEY RIGHT HERE {:?}", tmp_add_instr);
+        println!("HEY RIGHT HERE {:?}", tmp_load_instr);
         memory_system.force_store(0, MemBlock::Bits32(add_instr));
 
         Self {
