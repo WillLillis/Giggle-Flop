@@ -85,6 +85,15 @@ impl Instruction {
         }
     }
 
+    pub fn is_store_instr(&self) -> bool {
+        match self {
+            Instruction::Type4 { opcode, .. } => {
+                return opcode == 6 | 7 | 8;
+            },
+            _ => false,
+        }
+    }
+
     pub fn is_alu_instr(&self) -> bool {
         match self {
             Instruction::Type0 { .. } | Instruction::Type1 { .. } => false,
