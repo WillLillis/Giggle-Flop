@@ -9,7 +9,7 @@ const MASK_21: u32 = 0b111111111111111111111;
 
 pub type RawInstruction = u32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum InstructionResult {
     UnsignedIntegerResult { dest: usize, val: u32 },
     IntegerResult { dest: usize, val: i32 },
@@ -24,7 +24,7 @@ pub enum MemType {
     Float,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct InstructionState {
     pub instr: Option<Instruction>,
     pub val: Option<InstructionResult>,

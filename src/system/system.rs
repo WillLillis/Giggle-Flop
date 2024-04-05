@@ -96,25 +96,32 @@ impl System {
                     // value accordingly
                     // let mem_type = self.execute.instruction.get_mem_type();
                     let val = load_resp.data.get_contents(pc).unwrap().get_data();
+                    self.fetch.instruction.instr = Some(Instruction::Type4 { opcode: 2, reg_1: pc as u32, immediate: pc as u32 });
                     self.fetch.instruction.val =
                         Some(InstructionResult::UnsignedIntegerResult {
                             dest: pc,
                             val,
-                        })
+                        });
                 }
                 MemResponse::Store => unreachable!(),
             }
         }
+        let mut fetch_instr: Option<InstructionState> = None;
         // if no current instruction or decode blocked -> return noop/stall
-        if self.fetch.instruction.instr == None  || decode_blocked {
+        if self.fetch.instruction.val == None  || decode_blocked {
             self.fetch.instruction.stall = true;
+            fetch_instr = Some(self.fetch.instruction.clone());
         }
         // if current instruction & decode not blocked -> return instruction, increment PC
-        if self.fetch.instruction.instr != None && !decode_blocked {
+        if self.fetch.instruction.val != None && !decode_blocked {
+            self.fetch.instruction.stall = false;
             self.registers.program_counter += 32;
+            fetch_instr = Some(self.fetch.instruction.clone());
+            // TODO: fix this - clear current instruction?
+            self.fetch.instruction = InstructionState::default();
         }
         println!("end fetch");
-        return self.fetch.instruction.clone()
+        return fetch_instr.unwrap();
     }
 
     fn pipeline_decode(&mut self, execute_blocked: bool, memory_blocked: bool) -> InstructionState {
@@ -131,10 +138,15 @@ impl System {
         // if instruction missing operands or execute blocked-> return noop/stall
         println!("end decode");
         if has_operands && !execute_blocked {
+            self.decode.instruction.stall = false;
             return self.decode.instruction.clone();
         }
         if !has_operands || execute_blocked {
             self.decode.instruction.stall = true;   
+        }
+        else {
+            // TODO: not sure what this case is..
+            println!("shouldnt be here..")
         }
         return self.decode.instruction.clone();
     }
@@ -144,12 +156,11 @@ impl System {
         if self.execute.instruction.stall {
             // if noop -> do nothing
         } else {
-            // if ALU op -> do op
             // if jump -> get address
             // if jump subroutine -> get PC, get address
             // if branch -> check condition, set flag, calculate target address
-            // if memory -> do address calculation
             if let Some(instr) = self.execute.instruction.instr {
+                // if ALU op -> do op
                 if instr.is_alu_instr() {
                     // TODO: fix hardcoding
                     if let Instruction::Type5 {
@@ -160,25 +171,33 @@ impl System {
                     } = instr {
                     }
                 }
+                // if memory -> do address calculation
+                if instr.is_mem_instr() {
+
+                }
             }
         }
         // call decode with blocked status from memory
-        let decode_instr = self.pipeline_decode(false, true);
+        let decode_instr = self.pipeline_decode(false, memory_blocked);
 
         // if memory not blocked -> return instruction object to memory with result
         // if memory blocked -> return noop/stall
+        let mut exec_instr: Option<InstructionState> = None;
         if memory_blocked {
             self.execute.instruction.stall = true;
+            exec_instr = Some(self.execute.instruction.clone());
         } else {
-            self.execute.instruction.val = Some(InstructionResult::UnsignedIntegerResult {
-                dest: 3 as usize,
-                val: 1,
-            });
+            println!("memory not blocked");
+            // TODO: placement setting, probably needs to change
+            self.execute.instruction.instr = decode_instr.instr;
+            self.execute.instruction.val = decode_instr.val;
+            self.execute.instruction.stall = false;
+            exec_instr = Some(self.execute.instruction.clone());
         }        
         // save instruction from decode as next instruction
         self.execute.instruction = decode_instr;
         println!("end execute");
-        return self.execute.instruction.clone();
+        return exec_instr.unwrap();
 
     }
 
@@ -225,17 +244,18 @@ impl System {
                                 // TODO: Check if unsigned, signed, or float result, set execute's
                                 // value accordingly
                                 // let mem_type = self.execute.instruction.get_mem_type();
-                                let val = load_resp
-                                    .data
-                                    .get_contents(immediate as usize)
-                                    .unwrap()
-                                    .get_data();
-                                self.execute.instruction.val =
-                                    Some(InstructionResult::UnsignedIntegerResult {
-                                        dest: reg_1 as usize,
-                                        val,
-                                    });
-                                    exec_instr = Some(self.pipeline_execute(false));
+                                // let val = load_resp
+                                //     .data
+                                //     .get_contents(immediate as usize)
+                                //     .unwrap()
+                                //     .get_data();
+                                // self.execute.instruction.instr = Some(instr);
+                                // self.execute.instruction.val =
+                                //     Some(InstructionResult::UnsignedIntegerResult {
+                                //         dest: reg_1 as usize,
+                                //         val,
+                                //     });
+                                exec_instr = Some(self.pipeline_execute(false));
                             }
                             MemResponse::Store => unreachable!(),
                         }
@@ -281,89 +301,27 @@ impl System {
                 // do nothing
             }
         }
-        exec_instr = Some(self.pipeline_execute(false));
+        // TODO: this probably shouldnt need to exist, figure out where to put it
+        if exec_instr == None {
+            exec_instr = Some(self.pipeline_execute(false));
+        }
+
         if let Some(instruction) = exec_instr {
-            if let Some(exec_instr) = instruction.instr {
+            if let Some(instr) = instruction.instr {
                 // if instruction isnt load/store -> return to write_back forwarding instruction
-                if !exec_instr.is_mem_instr() {
+                if !instr.is_mem_instr() {
+                    println!("shouldnt be here...");
                     return instruction;
                 } else {
                     // if instruction is load/store ->
                     //      if cache returns wait -> return to write_back with noop/stall
                     //      if cache returns value -> put value in instruction result and return to write_back
-                    if exec_instr.is_load_instr() {
-                        let width = exec_instr.get_mem_width().unwrap();
-                        // TODO: also support Type 2 loads
-                        if let Instruction::Type4 {
-                            opcode,
-                            reg_1,
-                            immediate,
-                            ..
-                        } = exec_instr
-                        {
-                            // destructure to grab immediate field
-                            let request = MemRequest::Load(LoadRequest {
-                                issuer: PipelineStage::Memory,
-                                address: immediate as usize,
-                                width,
-                            });
-                            let resp = self.memory_system.request(&request).unwrap();
-                            match resp {
-                                MemResponse::Miss | MemResponse::Wait => {
-                                    self.memory.instruction.stall = true;
-                                    return self.memory.instruction.clone();
-                                }
-                                MemResponse::Load(load_resp) => {
-                                    // TODO: Check if unsigned, signed, or float result, set execute's
-                                    // value accordingly
-                                    // let mem_type = self.execute.instruction.get_mem_type();
-                                    let val = load_resp
-                                        .data
-                                        .get_contents(immediate as usize)
-                                        .unwrap()
-                                        .get_data();
-                                    self.memory.instruction.val =
-                                        Some(InstructionResult::UnsignedIntegerResult {
-                                            dest: reg_1 as usize,
-                                            val,
-                                        });
-                                    return self.memory.instruction.clone();
-                                }
-                                MemResponse::Store => unreachable!(),
-                            }
-                        }
-                    }
-                    if exec_instr.is_store_instr() {
-                        // TODO: width is prob still relevant idk where tho
-                        let width = exec_instr.get_mem_width().unwrap();
-                        if let Instruction::Type4 {
-                            immediate,
-                            ..
-                        } = exec_instr
-                        {
-                            let data = if let InstructionResult::AddressResult { addr } = instruction.val.unwrap() {
-                                MemBlock::Bits32(addr)
-                            } else {
-                                panic!("Bad result");
-                            };
-                            // destructure to grab immediate field
-                            let request = MemRequest::Store(StoreRequest {
-                                issuer: PipelineStage::Memory,
-                                address: immediate as usize,
-                                data,
-                            });
-                            let resp = self.memory_system.request(&request).unwrap();
-                            match resp {
-                                MemResponse::Wait => {
-                                    self.memory.instruction.stall = true;
-                                    return self.memory.instruction.clone();
-                                }
-                                MemResponse::Store => {
-                                    return self.memory.instruction.clone();
-                                }
-                                MemResponse::Miss | MemResponse::Load(_) => unreachable!(),
-                            }
-                        } 
+                    println!("is mem instruction...");
+                    if instr.is_load_instr() | instr.is_store_instr(){
+                        self.memory.instruction = instruction;
+                        let res = self.memory.instruction.clone();
+                        self.memory.instruction = InstructionState::default();
+                        return res;
                     }
                 }
             }
@@ -376,6 +334,7 @@ impl System {
         // if saved instruction has result -> write to reg, update pending regs
         println!("start write_back");
         if !self.write_back.instruction.stall {
+            println!("not a stall"); 
             match self.write_back.instruction.val {
                 Some(InstructionResult::UnsignedIntegerResult { dest, val }) => {
                     self.registers.general[dest].write_block_unsigned(MemBlock::Bits32(val));
@@ -407,6 +366,7 @@ impl System {
 
     pub fn step(&mut self) {
         self.pipeline_run();
+        self.memory_system.update_clock();
         self.clock += 1;
     }
 }
