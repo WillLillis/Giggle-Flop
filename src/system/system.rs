@@ -1,6 +1,8 @@
 use crate::common::PipelineStage;
 use crate::execution::execution_state::ExecutionState;
-use crate::memory::memory_system::{LoadRequest, MemRequest, MemResponse, MemWidth, Memory, StoreRequest};
+use crate::memory::memory_system::{
+    LoadRequest, MemRequest, MemResponse, MemWidth, Memory, StoreRequest,
+};
 use crate::pipeline::execute::PipelineExecute;
 use crate::pipeline::instruction::{
     Instruction, InstructionResult, InstructionState, RawInstruction,
@@ -42,7 +44,7 @@ impl System {
     pub fn default() -> Self {
         let mut memory_system = Memory::new(4, &[32, 64], &[1, 2]);
         // Load up a sample program
-        // we will simply add two numbers inside two registers 
+        // we will simply add two numbers inside two registers
         memory_system.force_store(128, MemBlock::Bits32(1));
         let load_instr = 0b00000000000001000000000010010100;
         let add_instr = 0b00000000000000011001000010001101;
@@ -96,19 +98,20 @@ impl System {
                     // value accordingly
                     // let mem_type = self.execute.instruction.get_mem_type();
                     let val = load_resp.data.get_contents(pc).unwrap().get_data();
-                    self.fetch.instruction.instr = Some(Instruction::Type4 { opcode: 2, reg_1: pc as u32, immediate: pc as u32 });
+                    self.fetch.instruction.instr = Some(Instruction::Type4 {
+                        opcode: 2,
+                        reg_1: pc as u32,
+                        immediate: pc as u32,
+                    });
                     self.fetch.instruction.val =
-                        Some(InstructionResult::UnsignedIntegerResult {
-                            dest: pc,
-                            val,
-                        });
+                        Some(InstructionResult::UnsignedIntegerResult { dest: pc, val });
                 }
                 MemResponse::Store => unreachable!(),
             }
         }
         let mut fetch_instr: Option<InstructionState> = None;
         // if no current instruction or decode blocked -> return noop/stall
-        if self.fetch.instruction.val == None  || decode_blocked {
+        if self.fetch.instruction.val == None || decode_blocked {
             self.fetch.instruction.stall = true;
             fetch_instr = Some(self.fetch.instruction.clone());
         }
@@ -142,9 +145,8 @@ impl System {
             return self.decode.instruction.clone();
         }
         if !has_operands || execute_blocked {
-            self.decode.instruction.stall = true;   
-        }
-        else {
+            self.decode.instruction.stall = true;
+        } else {
             // TODO: not sure what this case is..
             println!("shouldnt be here..")
         }
@@ -156,10 +158,11 @@ impl System {
         if self.execute.instruction.stall {
             // if noop -> do nothing
         } else {
-            // if jump -> get address
             // if jump subroutine -> get PC, get address
             // if branch -> check condition, set flag, calculate target address
             if let Some(instr) = self.execute.instruction.instr {
+                // if jump -> get address
+                if instr.is_jump_instr() {}
                 // if ALU op -> do op
                 if instr.is_alu_instr() {
                     // TODO: fix hardcoding
@@ -167,14 +170,12 @@ impl System {
                         opcode: 1,
                         reg_1: 1,
                         reg_2: 2,
-                        reg_3: 3
-                    } = instr {
-                    }
+                        reg_3: 3,
+                    } = instr
+                    {}
                 }
                 // if memory -> do address calculation
-                if instr.is_mem_instr() {
-
-                }
+                if instr.is_mem_instr() {}
             }
         }
         // call decode with blocked status from memory
@@ -193,12 +194,11 @@ impl System {
             self.execute.instruction.val = decode_instr.val;
             self.execute.instruction.stall = false;
             exec_instr = Some(self.execute.instruction.clone());
-        }        
+        }
         // save instruction from decode as next instruction
         self.execute.instruction = decode_instr;
         println!("end execute");
         return exec_instr.unwrap();
-
     }
 
     // BUG: Where do we return the instruction to writeback???
@@ -272,7 +272,9 @@ impl System {
                         ..
                     } = instr
                     {
-                        let data = if let InstructionResult::AddressResult { ref addr } = self.memory.instruction.val.as_ref().unwrap() {
+                        let data = if let InstructionResult::AddressResult { ref addr } =
+                            self.memory.instruction.val.as_ref().unwrap()
+                        {
                             MemBlock::Bits32(addr.clone())
                         } else {
                             panic!("Bad result");
@@ -317,7 +319,7 @@ impl System {
                     //      if cache returns wait -> return to write_back with noop/stall
                     //      if cache returns value -> put value in instruction result and return to write_back
                     println!("is mem instruction...");
-                    if instr.is_load_instr() | instr.is_store_instr(){
+                    if instr.is_load_instr() | instr.is_store_instr() {
                         self.memory.instruction = instruction;
                         let res = self.memory.instruction.clone();
                         self.memory.instruction = InstructionState::default();
@@ -334,7 +336,6 @@ impl System {
         // if saved instruction has result -> write to reg, update pending regs
         println!("start write_back");
         if !self.write_back.instruction.stall {
-            println!("not a stall"); 
             match self.write_back.instruction.val {
                 Some(InstructionResult::UnsignedIntegerResult { dest, val }) => {
                     self.registers.general[dest].write_block_unsigned(MemBlock::Bits32(val));

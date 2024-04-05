@@ -89,7 +89,7 @@ impl Instruction {
         match self {
             Instruction::Type4 { opcode, .. } => {
                 return *opcode == 6 || *opcode == 7 || *opcode == 8;
-            },
+            }
             _ => false,
         }
     }
@@ -107,6 +107,21 @@ impl Instruction {
                 _ => false,
             },
             Instruction::Type5 { .. } | Instruction::Type6 { .. } => true,
+        }
+    }
+
+    pub fn is_jump_instr(&self) -> bool {
+        match self {
+            Instruction::Type0 { opcode } => match opcode {
+                0 => true,
+                _ => false,
+            },
+            Instruction::Type1 { .. } => true,
+            Instruction::Type2 { .. }
+            | Instruction::Type3 { .. }
+            | Instruction::Type4 { .. }
+            | Instruction::Type5 { .. }
+            | Instruction::Type6 { .. } => false,
         }
     }
 
