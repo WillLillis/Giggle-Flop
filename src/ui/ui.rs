@@ -338,8 +338,6 @@ impl GiggleFlopUI {
             .padding(10)
             .into();
 
-
-
         row![column![register_pane, memory_pane], column![code_pane]].into()
     }
 

@@ -165,6 +165,140 @@ impl System {
                 if instr.is_jump_instr() {}
                 // if ALU op -> do op
                 if instr.is_alu_instr() {
+                    match instr {
+                        // panic for this case, shouldn't happen
+                        Instruction::Type0 { .. } | Instruction::Type1 { .. } => {}
+                        Instruction::Type2 {
+                            opcode,
+                            reg_1,
+                            reg_2,
+                        } => {
+                            // CMP8/CMP16/CMP32 Rx, Ry
+                            if opcode == 0 {
+                            } else if opcode == 1 {
+                            } else if opcode == 2 {
+                            } else {
+                                // shouldn't reach here so panic?
+                                // TODO: figure out what to actually do here
+                                panic!()
+                            }
+                        }
+                        Instruction::Type3 { freg_1, freg_2, .. } => {
+                            // CMPF <Fx>, <Fy>
+                            // Sets appropriate status bits in the S register by comparing the appropriate number of bits between Fx and Fy
+                            if self.registers.float[freg_1 as usize].data
+                                > self.registers.float[freg_2 as usize].data
+                            {
+                            } else if self.registers.float[freg_1 as usize].data
+                                < self.registers.float[freg_2 as usize].data
+                            {
+                            } else {
+                            }
+                        }
+                        Instruction::Type4 {
+                            opcode,
+                            reg_1,
+                            immediate,
+                        } => {
+                            if opcode == 9 {
+                                // ADDIM <Rx>, <Immediate Address>
+                                // Adds the immediate value to the contents of Rx, placing the result into Rx. The appropriate status bits in the S register are set.
+                                // TODO: fix this
+                                let x = self.registers.general[reg_1 as usize];
+                                let sum = immediate + x;
+                                self.execute.instruction.val =
+                                    Some(InstructionResult::IntegerResult {
+                                        dest: reg_1,
+                                        val: sum,
+                                    })
+                            } else {
+                                // shouldn't reach here so panic?
+                                // TODO: figure out what to actually do here
+                                panic!()
+                            }
+                        }
+                        Instruction::Type5 {
+                            opcode,
+                            reg_1,
+                            reg_2,
+                            reg_3,
+                        } => {
+                            // different thing for each opcode, might be slow
+                            match opcode {
+                                0 => {
+                                    // ADDI <Rx>, <Ry>, <Rz>
+                                }
+                                1 => {
+                                    // SUBI <Rx>, <Ry>, <Rz>
+                                }
+                                2 => {
+                                    // MULI <Rx>, <Ry>, <Rz>
+                                }
+                                3 => {
+                                    // DIVI <Rx>, <Ry>, <Rz>
+                                }
+                                4 => {
+                                    // MODI <Rx>, <Ry>, <Rz>
+                                }
+                                5 => {
+                                    // RBSI <Rx>, <Ry>, <Rz>
+                                }
+                                6 => {
+                                    // XORI <Rx>, <Ry>, <Rz>
+                                }
+                                7 => {
+                                    // ANDI <Rx>, <Ry>, <Rz>
+                                }
+                                8 => {
+                                    // ORI <Rx>, <Ry>, <Rz>
+                                }
+                                9 => {
+                                    // ADDU <Rx>, <Ry>, <Rz>
+                                }
+                                10 => {
+                                    // SUBU <Rx>, <Ry>, <Rz>
+                                }
+                                11 => {
+                                    // MULU <Rx>, <Ry>, <Rz>=
+                                }
+                                12 => {
+                                    // DIVU <Rx>, <Ry>, <Rz>
+                                }
+                                13 => {
+                                    // MODU <Rx>, <Ry>, <Rz>
+                                }
+                                // shouldn't reach here so panic?
+                                // TODO: figure out what to actually do here
+                                _ => panic!(),
+                            }
+                        }
+                        Instruction::Type6 {
+                            opcode,
+                            freg_1,
+                            freg_2,
+                            freg_3,
+                        } => {
+                            // same as type 5, might be slow
+                            match opcode {
+                                0 => {
+                                    // ADDF <Fx>, <Fy>, <Fz>
+                                }
+                                1 => {
+                                    // SUBF <Fx>, <Fy>, <Fz>
+                                }
+                                2 => {
+                                    // MULF <Fx>, <Fy>, <Fz>
+                                }
+                                3 => {
+                                    // DIVF <Fx>, <Fy>, <Fz>
+                                }
+                                // shouldn't reach here so panic?
+                                // TODO: figure out what to actually do here
+                                _ => panic!(),
+                            }
+                        }
+                        _ => {}
+                    }
                     // TODO: fix hardcoding
                     if let Instruction::Type5 {
                         opcode: 1,

@@ -45,6 +45,7 @@ impl Display for IntRegData {
     }
 }
 
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct FloatRegData(f32);
 
 impl Display for FloatRegData {
@@ -65,7 +66,7 @@ impl GeneralRegister {
         }
     }
 }
-
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct FloatRegister {
     pub data: FloatRegData,
 }
