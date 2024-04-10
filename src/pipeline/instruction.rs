@@ -1,6 +1,12 @@
-use crate::memory::memory_system::MemWidth;
+use std::ops::RangeBounds;
 
-// hey a new file
+use log::info;
+
+use crate::{
+    common::PipelineStage,
+    memory::memory_system::{LoadRequest, MemRequest, MemType},
+};
+
 const MASK_1: u32 = 0b1;
 const MASK_2: u32 = 0b11;
 const MASK_3: u32 = 0b111;
@@ -18,7 +24,7 @@ pub enum InstructionResult {
 }
 
 #[derive(Debug)]
-pub enum MemType {
+pub enum DataType {
     Unsigned,
     Signed,
     Float,
@@ -42,30 +48,30 @@ pub enum Instruction {
     }, // One immediate argument
     Type2 {
         opcode: u32,
-        reg_1: u32,
-        reg_2: u32,
+        reg_1: usize,
+        reg_2: usize,
     }, // Two general purpose register arguments
     Type3 {
         opcode: u32,
-        freg_1: u32,
-        freg_2: u32,
+        freg_1: usize,
+        freg_2: usize,
     }, // Two floating point register arguments
     Type4 {
         opcode: u32,
-        reg_1: u32,
+        reg_1: usize,
         immediate: u32,
     }, // One general purpose register argument, one immediate
     Type5 {
         opcode: u32,
-        reg_1: u32,
-        reg_2: u32,
-        reg_3: u32,
+        reg_1: usize,
+        reg_2: usize,
+        reg_3: usize,
     }, // Three general purpose register arguments
     Type6 {
         opcode: u32,
-        freg_1: u32,
-        freg_2: u32,
-        freg_3: u32,
+        freg_1: usize,
+        freg_2: usize,
+        freg_3: usize,
     }, // Three floating point register arguments
 }
 
@@ -78,8 +84,58 @@ impl Instruction {
         }
     }
 
-    pub fn is_load_instr(&self) -> bool {
+    /// Returns the associated `MemoryRequest` for an instruction if appropriate
+    pub fn get_mem_req(&self, issuer: Option<PipelineStage>) -> Option<MemRequest> {
+        info!("Generating memory request for instruction {:?}", self);
         match self {
+            Instruction::Type2 {
+                opcode,
+                reg_1,
+                reg_2,
+            } => {
+                let mem_type = match opcode {
+                    3 => MemType::Unsigned8,
+                    4 => MemType::Unsigned16,
+                    5 => MemType::Unsigned32,
+                    _ => {
+                        return None;
+                    }
+                };
+                Some(MemRequest::Load(LoadRequest {
+                    issuer: issuer.unwrap_or_default(),
+                    address: *reg_2 as usize,
+                    width: mem_type,
+                }))
+            }
+            Instruction::Type4 {
+                opcode,
+                reg_1,
+                immediate,
+            } => {
+                let mem_type = match opcode {
+                    0 => MemType::Unsigned8,
+                    1 => MemType::Unsigned16,
+                    2 => MemType::Unsigned32,
+                    3 => MemType::Signed8,
+                    4 => MemType::Signed16,
+                    5 => MemType::Signed32,
+                    _ => {
+                        return None;
+                    }
+                };
+                Some(MemRequest::Load(LoadRequest {
+                    issuer: issuer.unwrap_or_default(),
+                    address: *immediate as usize,
+                    width: mem_type,
+                }))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn is_load(&self) -> bool {
+        match self {
+            Instruction::Type2 { opcode, .. } => (3..=5).contains(opcode),
             Instruction::Type4 { opcode, .. } => (0..=5).contains(opcode),
             _ => false,
         }
@@ -144,7 +200,8 @@ impl Instruction {
     //     }
     // }
 
-    pub fn get_mem_width(&self) -> Option<MemWidth> {
+    // TODO: rethink this...
+    pub fn get_mem_width(&self) -> Option<MemType> {
         match self {
             Instruction::Type0 { .. }
             | Instruction::Type1 { .. }
@@ -156,9 +213,9 @@ impl Instruction {
                 reg_1,
                 reg_2,
             } => match opcode {
-                0 | 3 => Some(MemWidth::Bits8),
-                1 | 4 => Some(MemWidth::Bits16),
-                2 | 5 => Some(MemWidth::Bits32),
+                0 | 3 => Some(MemType::Bits8),
+                1 | 4 => Some(MemType::Bits16),
+                2 | 5 => Some(MemType::Bits32),
                 _ => None,
             },
             Instruction::Type4 {

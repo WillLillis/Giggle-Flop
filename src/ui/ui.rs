@@ -1,10 +1,7 @@
-use cfonts::render::RenderedString;
 use iced::widget::scrollable::Properties;
-use iced::widget::{
-    button, horizontal_rule, horizontal_space, pane_grid, vertical_space, PaneGrid,
-};
+use iced::widget::{button, pane_grid, PaneGrid};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
-use iced::{Alignment, Color, Command, Element, Length, Theme};
+use iced::{Alignment, Command, Element, Length, Theme};
 
 use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;

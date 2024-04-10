@@ -7,9 +7,8 @@ use crate::memory::memory_system::MEM_BLOCK_WIDTH;
 
 use anyhow::{anyhow, Result};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct MemLine {
-    // just store address of the first entry in the line, mess with tags later if necessary...
     start_addr: Option<usize>,
     data: Vec<MemBlock>,
 }
@@ -128,7 +127,7 @@ mod test {
             // use %'s to prevent overflow...
             let line_len = (random::<usize>() % 64) + 1;
             let base_addr = (random::<usize>() % 128) * line_len;
-            let blocks = vec![MemBlock::Bits32(777); line_len];
+            let blocks = vec![MemBlock::Unsigned32(777); line_len];
             let mut line = get_test_memline(base_addr, line_len);
 
             for i in 0..line_len {

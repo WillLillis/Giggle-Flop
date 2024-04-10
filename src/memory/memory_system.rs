@@ -18,33 +18,51 @@ pub const N_ADDRESS_BITS: usize = 21;
 pub const ADDRESS_SPACE_SIZE: usize = 2usize.pow(N_ADDRESS_BITS as u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum MemWidth {
-    Bits8,
-    Bits16,
-    Bits32,
+pub enum MemType {
+    Unsigned8,
+    Unsigned32,
+    Unsigned16,
+    Signed8,
+    Signed32,
+    Signed16,
+    Float32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LoadRequest {
     pub issuer: PipelineStage,
     pub address: usize,
-    pub width: MemWidth,
+    pub width: MemType,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct StoreRequest {
     pub issuer: PipelineStage,
     pub address: usize,
     pub data: MemBlock,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum MemRequest {
     Load(LoadRequest),
     Store(StoreRequest),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+impl MemRequest {
+    /// Returns the address associated with a given request
+    pub fn get_address(&self) -> usize {
+        match self {
+            MemRequest::Load(req) => {
+                req.address
+            }
+            MemRequest::Store(req) => {
+                req.address
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct LoadResponse {
     pub data: MemLine,
 }
@@ -57,7 +75,7 @@ pub enum MemResponse {
     Miss,
     Wait,
     Load(LoadResponse),
-    Store,
+    StoreComplete,
 }
 
 #[derive(Debug, Clone)]
@@ -182,34 +200,40 @@ impl Memory {
     }
 
     /// Process a load request
-    fn load(&mut self, request: &LoadRequest) -> Result<MemResponse> {
-        if request.address % MEM_BLOCK_WIDTH != 0 {
-            return Err(anyhow!("Unaligned load access: {}", request.address));
+    fn load(&mut self, req: &LoadRequest) -> Result<MemResponse> {
+        info!("Processing load request: {:?}", req);
+        if req.address % MEM_BLOCK_WIDTH != 0 {
+            return Err(anyhow!("Unaligned load access: {}", req.address));
         }
 
         for level in 0..self.levels.len() {
-            let resp = self.levels[level].load(request);
+            let resp = self.levels[level].load(req);
             match resp {
                 MemResponse::Miss => {
-                    info!("Cache miss at level {level}");
+                    info!("Cache miss at level {level} for request: {:?}", req);
                     continue;
                 }
                 MemResponse::Wait => {
-                    info!("Wait response at level {level}");
+                    info!("Wait response at level {level}, for request: {:?}", req);
                     return Ok(resp);
                 }
                 MemResponse::Load(ref data) => {
-                    info!("Data returned: {:?}", data);
+                    info!("Data returned: {:?}, for request: {:?}", data, req);
                     self.populate_cache(level.saturating_sub(1), &data.data)?;
                     return Ok(resp);
                 }
-                MemResponse::Store => {
-                    panic!("Received Store response in load()");
+                MemResponse::StoreComplete => {
+                    error!(
+                        "Received StoreComplete response in load(), request: {:?}",
+                        req
+                    );
+                    panic!("Received StoreComplete response in load()");
                 }
             }
         }
 
         // accesses to main memory will *always* hit
+        error!("Load request missed at all levels: {:?}", req);
         unreachable!()
     }
 
@@ -217,6 +241,7 @@ impl Memory {
     // to the main memory
     /// Store a value in the system's main memory
     fn store(&mut self, req: &StoreRequest) -> Result<MemResponse> {
+        info!("Processing store request: {:?}", req);
         if req.address % MEM_BLOCK_WIDTH != 0 {
             return Err(anyhow!("Unaligned store access: {:?}", req));
         }
@@ -226,34 +251,59 @@ impl Memory {
         let main_mem = self.levels.last_mut().unwrap();
         match main_mem.curr_req {
             Some((0, MemRequest::Store(ref completed_req))) if completed_req == req => {
+                info!("Store request completed, request: {:?}", req);
                 // actually write the data...
                 main_mem
                     .write_block(completed_req.address, completed_req.data)
                     .expect("Write failed -- Error {e}");
 
                 // book-keeping on request queue
+                info!("Popping head of request queue");
                 main_mem.curr_req = None;
                 if let Some(next_req) = main_mem.reqs.pop_front() {
+                    info!(
+                        "Moving next pending request to the head, request: {:?}",
+                        next_req
+                    );
                     main_mem.curr_req = Some((main_mem.latency(), next_req));
                 }
-                return Ok(MemResponse::Store);
+                return Ok(MemResponse::StoreComplete);
             }
             Some((_delay, MemRequest::Store(ref pending_req))) => {
                 if pending_req != req {
-                    main_mem.reqs.push_back(MemRequest::Store(req.clone()));
+                    info!(
+                        "Other Store request at head of request queue: {:?}",
+                        pending_req
+                    );
+                    if !main_mem.reqs.contains(&MemRequest::Store(req.clone())) {
+                        info!("Adding request to queue: {:?}", req);
+                        main_mem.reqs.push_back(MemRequest::Store(req.clone()));
+                    } else {
+                        info!("Request already in queue: {:?}", req);
+                    }
+                } else {
+                    info!("Request pending: {:?}", pending_req);
                 }
             }
-            Some((_, _)) => {
+            Some((_, ref pending_req)) => {
+                info!("Other request at head of request queue: {:?}", pending_req);
+                info!("Adding request to queue: {:?}", req);
                 main_mem.reqs.push_back(MemRequest::Store(req.clone()));
             }
-            None => main_mem.curr_req = Some((latency, MemRequest::Store(req.clone()))),
+            None => {
+                info!(
+                    "No current request, adding request to head of queue, request: {:?}",
+                    req
+                );
+                main_mem.curr_req = Some((latency, MemRequest::Store(req.clone())));
+            }
         }
 
         Ok(MemResponse::Wait)
     }
 
     /// Decrements the latency counters for all current requests, effectively
-    /// moving the system forward in time
+    /// moving the system forward in time one step
     pub fn update_clock(&mut self) {
         // update timer for all request queues
         for level in &mut self.levels {
@@ -277,7 +327,8 @@ impl Memory {
         let address = data.start_address().expect("Empty address field");
         for level in 0..=start_level {
             info!("Populating cache level {level} with {:?}", data);
-            let address = address % self.num_lines(level).unwrap();
+            let address = address % self.num_lines(level).unwrap(); // wrap addresses to avoid
+                                                                    // overflow
             self.levels[level].write_line(address, data)?;
         }
 
@@ -300,7 +351,7 @@ impl Memory {
         Ok(())
     }
 
-    /// Returns a cow of the requested level
+    /// Returns a cow of the requested level's string representation
     pub fn get_level(&self, level: usize) -> Result<Cow<MemoryLevel>> {
         if level >= self.num_levels() {
             return Err(anyhow!("Invalid level number"));
@@ -311,13 +362,17 @@ impl Memory {
 
     /// Issue a `MemRequest` to the memory system
     pub fn request(&mut self, request: &MemRequest) -> Result<MemResponse> {
+        info!("Issuing request to memory system: {:?}", request);
         match request {
             MemRequest::Load(req) => {
                 info!("Issuing load request to memory system: {:?}", req);
                 let resp = self.load(req);
                 match resp {
                     Ok(MemResponse::Load(ref data)) => {
-                        info!("Load operation completed -- Data: {:?}", data);
+                        info!(
+                            "Load operation completed -- Data: {:?}, Request: {:?}",
+                            data, req
+                        );
                         resp
                     }
                     Ok(MemResponse::Wait) => {
@@ -331,11 +386,15 @@ impl Memory {
                         );
                         self.load(req)
                     }
-                    Ok(MemResponse::Store) => {
-                        unreachable!()
+                    Ok(MemResponse::StoreComplete) => {
+                        error!("Received StoreComplete response to LoadRequest: {:?}", req);
+                        panic!("Received StoreComplete response to LoadRequest: {:?}", req);
                     }
                     Err(e) => {
-                        error!("Error occured during load operation -- Error {e}");
+                        error!(
+                            "Error occured during load operation -- Error {e}, Request: {:?}",
+                            req
+                        );
                         panic!("Bad load");
                     }
                 }
@@ -344,14 +403,23 @@ impl Memory {
                 info!("Issuing store request to memory system: {:?}", req);
                 let resp = self.store(req);
                 match resp {
-                    Ok(MemResponse::Store) => {
-                        info!("Successsful store: {:?}", resp);
+                    Ok(MemResponse::StoreComplete) => {
+                        info!("StoreComplete response for store request: {:?}", req);
                         self.invalidate_address(req.address);
-                        Ok(MemResponse::Store)
+                        Ok(MemResponse::StoreComplete)
                     }
-                    Ok(_) => resp,
+                    Ok(resp_details) => {
+                        info!(
+                            "Received response {:?} for store request: {:?}",
+                            resp_details, req
+                        );
+                        resp
+                    }
                     Err(e) => {
-                        error!("Error occurred during store operation -- Error {e}");
+                        error!(
+                            "Error occurred during store operation -- Error {e}, Request: {:?}",
+                            req
+                        );
                         panic!("Bad store");
                     }
                 }

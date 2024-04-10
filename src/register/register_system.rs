@@ -2,160 +2,26 @@ use core::f32;
 use std::fmt::Display;
 
 use bitmaps::Bitmap;
-use log::{info, warn};
+use log::{error, info, warn};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
 
-use crate::memory::memory_system::MemBlock;
-
-// NOTE:
-// Avoiding over-abstracting here and choosing *not* to make a general register
-// struct for both floats and ints. Some of Rust's trait bounds for int to float
-// operations makes this messy, and we're fairly limited on the number of inner
-// data types we have to worry about. Might reconsider later
+use crate::memory::memory_system::{MemBlock, MEM_BLOCK_WIDTH};
 
 pub const GEN_REG_COUNT: usize = 16;
 pub const FLOAT_REG_COUNT: usize = 16;
 pub const FLAG_COUNT: usize = 32;
+pub const RET_REG: usize = GEN_REG_COUNT - 1;
 
-#[derive(Debug, Clone, Copy, Display, EnumString, EnumIter, PartialEq)]
+#[derive(Debug, Clone, Copy, Display, EnumString, EnumIter, PartialEq, Eq, Hash)]
 pub enum RegisterGroup {
     General = 0,
     FloatingPoint = 1,
     Flag = 2,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum IntRegData {
-    Unsigned(u32),
-    Signed(i32),
-}
-
-impl Display for IntRegData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IntRegData::Unsigned(x) => {
-                write!(f, "0x{x:08X}")?;
-            }
-            IntRegData::Signed(x) => {
-                write!(f, "0x{x:08X}")?;
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct FloatRegData(f32);
-
-impl Display for FloatRegData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:08}", self.0)?;
-        Ok(())
-    }
-}
-
-pub struct GeneralRegister {
-    pub data: IntRegData,
-}
-
-impl GeneralRegister {
-    pub fn new() -> Self {
-        Self {
-            data: IntRegData::Unsigned(0u32),
-        }
-    }
-}
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub struct FloatRegister {
-    pub data: FloatRegData,
-}
-
-impl FloatRegister {
-    pub fn new() -> Self {
-        Self {
-            data: FloatRegData(0f32),
-        }
-    }
-}
-
-// TODO: Implement display trait
-
-impl GeneralRegister {
-    /// Writes underlying contents of `data` into `self`, interpreting the inner
-    /// contents as unsigned data
-    pub fn write_block_unsigned(&mut self, data: MemBlock) {
-        let conv_data = match data {
-            MemBlock::Bits8(inner_data) => inner_data as u32,
-            MemBlock::Bits16(inner_data) => inner_data as u32,
-            MemBlock::Bits32(inner_data) => inner_data as u32,
-        };
-
-        self.data = IntRegData::Unsigned(conv_data);
-        info!(
-            "{:?} written to register as unsigned data: {conv_data}",
-            data
-        );
-    }
-
-    /// Writes underlying contents of `data` into `self`, interpreting the inner
-    /// contents as signed data
-    pub fn write_block_signed(&mut self, data: MemBlock) {
-        let conv_data = match data {
-            MemBlock::Bits8(inner_data) => inner_data as i32,
-            MemBlock::Bits16(inner_data) => inner_data as i32,
-            MemBlock::Bits32(inner_data) => inner_data as i32,
-        };
-
-        self.data = IntRegData::Signed(conv_data);
-        info!("{:?} written to register as signed data: {conv_data}", data);
-    }
-}
-
-impl Display for GeneralRegister {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.data)?;
-        Ok(())
-    }
-}
-
-impl FloatRegister {
-    /// Writes underlying contents of `data` into `self`, interpreting the inner
-    /// contents as floating point data. Data that is less than 32 bits wide will
-    /// be zero extended before writing
-    pub fn write_block(&mut self, data: MemBlock) {
-        // Any "under-width'd" reads will log an error and 0 extend (garbage no matter what...)
-        let conv_data = match data {
-            MemBlock::Bits8(inner_data) => {
-                warn!("Writing 8 bit block to 32 bit floating point register (Garbage Value)");
-                let bytes = inner_data.to_be_bytes();
-                f32::from_be_bytes([bytes[0], 0, 0, 0])
-            }
-            MemBlock::Bits16(inner_data) => {
-                warn!("Writing 16 bit block to 32 bit floating point register (Garbage Value)");
-                let bytes = inner_data.to_be_bytes();
-                f32::from_be_bytes([bytes[0], bytes[1], 0, 0])
-            }
-            MemBlock::Bits32(inner_data) => {
-                let bytes = inner_data.to_be_bytes();
-                f32::from_be_bytes(bytes)
-            }
-        };
-
-        self.data = FloatRegData(conv_data);
-        info!("{:?} written to register as float data: {conv_data}", data);
-    }
-}
-
-impl Display for FloatRegister {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.data)?;
-        Ok(())
-    }
-}
-
 /// Index of the flag register for each flag
-#[derive(Debug, Clone, Copy, EnumString, EnumIter)]
+#[derive(Debug, Clone, Copy, EnumString, EnumIter, Display)]
 pub enum FlagIndex {
     EQ = 0, // Equal
     LT = 1, // Less than
@@ -165,30 +31,116 @@ pub enum FlagIndex {
     ZO = 5, // Zero
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Register {
+    pub data: MemBlock,
+}
+
+impl Register {
+    pub fn default() -> Self {
+        Self {
+            data: MemBlock::Unsigned32(0),
+        }
+    }
+
+    pub fn new(data: MemBlock) -> Self {
+        Self { data }
+    }
+}
+
+impl Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.data)?;
+        Ok(())
+    }
+}
+
 pub struct RegisterSet {
-    pub general: [GeneralRegister; GEN_REG_COUNT],
-    pub float: [FloatRegister; FLOAT_REG_COUNT],
-    pub program_counter: usize,
-    pub flag: Bitmap<FLAG_COUNT>,
+    pub general: [Register; GEN_REG_COUNT],
+    pub float: [Register; FLOAT_REG_COUNT],
+    pub program_counter: u32,
+    pub status: Bitmap<FLAG_COUNT>,
 }
 
 impl RegisterSet {
     pub fn new() -> Self {
-        let general = core::array::from_fn(|_| GeneralRegister::new());
-        let float = core::array::from_fn(|_| FloatRegister::new());
-        let program_counter = 0;
-        let flag = Bitmap::new();
+        let general = core::array::from_fn(|_| Register::default());
+        let float = core::array::from_fn(|_| Register::default());
+        let program_counter = 0; // TODO: Different default value?
+        let flags = Bitmap::new();
 
         RegisterSet {
             general,
             float,
             program_counter,
-            flag,
+            status: flags,
         }
+    }
+
+    /// Increments the program counter by one word
+    pub fn step_pc(&mut self) {
+        info!(
+            "Incrementing program counter, old: {}, new: {}",
+            self.program_counter,
+            self.program_counter + MEM_BLOCK_WIDTH
+        );
+        self.program_counter += MEM_BLOCK_WIDTH;
+    }
+
+    /// Writes a value to a "normal" (non-PC) register
+    /// Mismatching datatypes will be converted with a logged warning
+    pub fn write_normal(&mut self, data: MemBlock, group: RegisterGroup, num: usize) {
+        match group {
+            RegisterGroup::General => {
+                if num >= GEN_REG_COUNT {
+                    error!("Attempted to write to general register {num}, max index is {GEN_REG_COUNT}, treating write as NOOP");
+                    return;
+                }
+                match data {
+                    MemBlock::Float32(inner) => {
+                        let bytes = inner.to_be_bytes();
+                        let conv = u32::from_be_bytes(bytes);
+                        warn!("Attempted to write float data {inner} to general register {num}, converted to u32 {conv}");
+                        self.general[num] = Register::new(MemBlock::Unsigned32(conv));
+                    }
+                    _ => {
+                        info!("Wrote {data} to general register {num}");
+                        self.general[num] = Register::new(data);
+                    }
+                }
+            }
+            RegisterGroup::FloatingPoint => {
+                if num >= FLOAT_REG_COUNT {
+                    error!("Attempted to write to general register {num}, max index is {FLOAT_REG_COUNT}, treating write as NOOP");
+                    return;
+                }
+                match data {
+                    MemBlock::Float32(inner) => {
+                        info!("Wrote {data} to floating point register {num}");
+                        self.float[num] = Register::new(data);
+                    }
+                    other => {
+                        let bytes = other.to_be_bytes();
+                        let conv = f32::from_be_bytes(bytes);
+                        warn!("Attempted to write float data {other} to general register {num}, converted to f32 {conv}");
+                        self.float[num] = Register::new(MemBlock::Float32(conv));
+                    }
+                }
+            }
+            RegisterGroup::Flag => {
+                error!(
+                    "Attempted to a normal write to the status register, treating write as NOOP"
+                );
+            }
+        }
+    }
+
+    pub fn write_status(&mut self, idx: FlagIndex, data: bool) {
+        info!("Setting status flag {idx} to {data}");
+        self.status.set(idx as usize, data);
     }
 }
 
-// TODO: Messy/ repeated logic here, clean up later...
 impl Display for RegisterSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut accum = String::new();
@@ -198,7 +150,7 @@ impl Display for RegisterSet {
         }
 
         for (i, flag_name) in FlagIndex::iter().enumerate() {
-            accum += &format!("{:?}: {}\n", flag_name, self.flag.get(i));
+            accum += &format!("{}: {}\n", flag_name, self.status.get(i));
         }
 
         write!(f, "{accum}")?;
@@ -222,7 +174,7 @@ impl RegisterSet {
             }
             RegisterGroup::Flag => {
                 for (i, flag_name) in FlagIndex::iter().enumerate() {
-                    accum += &format!("{:?}: {}\n", flag_name, self.flag.get(i));
+                    accum += &format!("{:?}: {}\n", flag_name, self.status.get(i));
                 }
             }
         }
