@@ -1,6 +1,5 @@
 #![warn(clippy::all, clippy::pedantic)]
-#![allow(clippy::module_name_repetitions)] // pub mod memory_system, Memory
-
+#![allow(clippy::module_name_repetitions)]
 use std::borrow::Cow;
 
 use crate::common::{Cycle, PipelineStage};
@@ -151,7 +150,6 @@ impl Memory {
     /// Manually set the values of an individual address to main memory
     pub fn force_store(&mut self, address: usize, data: MemBlock) {
         let main_level_idx = self.num_levels() - 1;
-        let addr_idx = self.levels[main_level_idx].address_index(address);
         self.levels[main_level_idx].force_store(address, data);
     }
 
@@ -408,7 +406,7 @@ impl Memory {
                         self.invalidate_address(req.address);
                         Ok(MemResponse::StoreComplete)
                     }
-                    Ok(resp_details) => {
+                    Ok(ref resp_details) => {
                         info!(
                             "Received response {:?} for store request: {:?}",
                             resp_details, req
