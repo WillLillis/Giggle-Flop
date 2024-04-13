@@ -1,6 +1,8 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-use std::fmt::Display;
+use std::{fmt::Display, ops::{Add, BitAnd, BitOr, BitXor}};
+
+use log::info;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum MemBlock {
@@ -34,6 +36,363 @@ impl MemBlock {
             }
             MemBlock::Signed32(data) => data.to_be_bytes(),
             MemBlock::Float32(data) => data.to_be_bytes(),
+        }
+    }
+
+    pub fn add_immediate(&mut self, immediate: u32) -> Self {
+        match self {
+            MemBlock::Unsigned8(data) => {
+                let data = *data as u32;
+                MemBlock::Unsigned32(data.wrapping_add(immediate))
+            }
+            MemBlock::Unsigned16(data) => {
+                let data = *data as u32;
+                MemBlock::Unsigned32(data.wrapping_add(immediate))
+            }
+            MemBlock::Unsigned32(data) => {
+                MemBlock::Unsigned32(data.wrapping_add(immediate))
+            }
+            MemBlock::Signed8(data) => {
+                let data = *data as i32;
+                MemBlock::Signed32(data.wrapping_add(immediate as i32))
+            }
+            MemBlock::Signed16(data) => {
+                let data = *data as i32;
+                MemBlock::Signed32(data.wrapping_add(immediate as i32))
+            }
+            MemBlock::Signed32(data) => {
+                MemBlock::Signed32(data.wrapping_add(immediate as i32))
+            }
+            MemBlock::Float32(data) => {
+                MemBlock::Float32(*data + immediate as f32)
+            }
+        }
+    }
+
+    fn get_unsigned(&self) -> Option<u32> {
+        match self {
+            Self::Unsigned8(data) => {
+                Some(*data as u32)
+            }
+            Self::Unsigned16(data) => {
+                Some(*data as u32)
+            }
+            Self::Unsigned32(data) => {
+                Some(*data)
+            }
+            _ => None
+        }
+    }
+
+    fn get_signed(&self) -> Option<i32> {
+        match self {
+            Self::Signed8(data) => {
+                Some(*data as i32)
+            }
+            Self::Signed16(data) => {
+                Some(*data as i32)
+            }
+            Self::Signed32(data) => {
+                Some(*data)
+            }
+            _ => None
+        }
+    }
+
+    fn get_float(&self) -> Option<f32> {
+        if let Self::Float32(data) = self {
+            Some(*data)
+        } else {
+            None
+        }
+    }
+
+    fn force_unsigned(&self) -> u32 {
+        match self {
+            MemBlock::Unsigned8(data) => {
+                *data as u32
+            }
+            MemBlock::Unsigned16(data) => {
+                *data as u32
+            },
+            MemBlock::Unsigned32(data) => {
+                *data
+            },
+            MemBlock::Signed8(data) => {
+                *data as u32
+            },
+            MemBlock::Signed16(data) => {
+                *data as u32
+            },
+            MemBlock::Signed32(data) => {
+                *data as u32
+            },
+            MemBlock::Float32(data) => {
+                *data as u32
+            },
+        }
+    }
+
+    fn force_signed(&self) -> i32 {
+        match self {
+            MemBlock::Unsigned8(data) => {
+                *data as i32
+            }
+            MemBlock::Unsigned16(data) => {
+                *data as i32
+            },
+            MemBlock::Unsigned32(data) => {
+                *data as i32
+            },
+            MemBlock::Signed8(data) => {
+                *data as i32
+            },
+            MemBlock::Signed16(data) => {
+                *data as i32
+            },
+            MemBlock::Signed32(data) => {
+                *data
+            },
+            MemBlock::Float32(data) => {
+                *data as i32
+            },
+        }
+    }
+
+    fn force_float(&self) -> f32 {
+        match self {
+            MemBlock::Unsigned8(data) => {
+                *data as f32
+            }
+            MemBlock::Unsigned16(data) => {
+                *data as f32
+            },
+            MemBlock::Unsigned32(data) => {
+                *data as f32
+            },
+            MemBlock::Signed8(data) => {
+                *data as f32
+            },
+            MemBlock::Signed16(data) => {
+                *data as f32
+            },
+            MemBlock::Signed32(data) => {
+                *data as f32
+            },
+            MemBlock::Float32(data) => {
+                *data
+            },
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn add_register(&mut self, conts: MemBlock) -> Self {
+        info!("Add register: {self} + {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.wrapping_add(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val.wrapping_add(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_float();
+            let result = MemBlock::Float32(val + other);
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn sub_register(&mut self, conts: MemBlock) -> Self {
+        info!("Subtract register: {self} - {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.wrapping_sub(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val.wrapping_sub(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_float();
+            let result = MemBlock::Float32(val - other);
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn mul_register(&mut self, conts: MemBlock) -> Self {
+        info!("Multiply register: {self} * {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.wrapping_mul(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val.wrapping_mul(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_float();
+            let result = MemBlock::Float32(val * other);
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn div_register(&mut self, conts: MemBlock) -> Self {
+        info!("Divide register: {self} / {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.wrapping_div(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val.wrapping_div(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_float();
+            let result = MemBlock::Float32(val / other);
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn mod_register(&mut self, conts: MemBlock) -> Self {
+        info!("Modulo register: {self} % {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val % other);
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val % other);
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_float();
+            let result = MemBlock::Float32(val % other);
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn right_shift_register(&mut self, conts: MemBlock) -> Self {
+        info!("Right shift register: {self} >> {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.wrapping_shr(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Signed32(val.wrapping_shr(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_unsigned();
+            let val = val as u32;
+            let result = MemBlock::Unsigned32(val.wrapping_shr(other));
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn xor_register(&mut self, conts: MemBlock) -> Self {
+        info!("XOR register: {self} ^ {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.bitxor(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val.bitxor(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_unsigned();
+            let val = val as u32;
+            let result = MemBlock::Unsigned32(val.bitxor(other));
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn and_register(&mut self, conts: MemBlock) -> Self {
+        info!("AND register: {self} & {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.bitand(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val.bitand(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_unsigned();
+            let val = val as u32;
+            let result = MemBlock::Unsigned32(val.bitand(other));
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
+        }
+    }
+
+    // there has to be a better way to do this...look into later
+    pub fn or_register(&mut self, conts: MemBlock) -> Self {
+        info!("OR register: {self} | {}", conts);
+        if let Some(val) = self.get_unsigned() {
+            let other = conts.force_unsigned();
+            let result = MemBlock::Unsigned32(val.bitor(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_signed() {
+            let other = conts.force_signed();
+            let result = MemBlock::Signed32(val.bitor(other));
+            info!("Result: {result}");
+            result
+        } else if let Some(val) = self.get_float() {
+            let other = conts.force_unsigned();
+            let val = val as u32;
+            let result = MemBlock::Unsigned32(val.bitor(other));
+            info!("Result: {result}");
+            result
+        } else {
+            unreachable!()
         }
     }
 }

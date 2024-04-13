@@ -9,12 +9,14 @@ use crate::memory::memory_system::{
 };
 use crate::pipeline::execute::PipelineExecute;
 use crate::pipeline::instruction::{
-    Instruction, InstructionResult, InstructionState, RawInstruction,
+    decode_raw_instr, Instruction, InstructionResult, InstructionState, RawInstruction,
 };
 use crate::pipeline::memory::PipelineMemory;
 use crate::pipeline::pipeline::{PipeLine, PipelineState};
 use crate::pipeline::write_back::PipelineWriteBack;
-use crate::register::register_system::{RegisterGroup, RegisterSet, RET_REG};
+use crate::register::register_system::{
+    get_comparison_flags, FlagIndex, RegisterGroup, RegisterSet, FLAG_COUNT, RET_REG,
+};
 
 use crate::memory::memory_system::MemBlock;
 use crate::pipeline::decode::PipelineDecode;
@@ -36,6 +38,8 @@ pub struct System {
     // // for shared state between stages if necessary...
     // pipeline_state: PipelineState,
     // Take 2 mfs
+    pub decode: PipelineStageStatus,
+    pub execute: PipelineStageStatus,
     pub memory: PipelineStageStatus,
     pub writeback: PipelineStageStatus,
     pub pending_reg: HashSet<(RegisterGroup, usize)>,
@@ -506,14 +510,364 @@ impl System {
     // }
 
     // NOTE: Keep in mind, execute needs to pass along blocked status to D from M
-    fn pipeline_decode(&mut self, mem_blocked: bool) {
+    fn pipeline_decode(&mut self, mem_blocked: bool) -> PipelineStageStatus {
         // returns an instruction with decode field filled?
+        match self.decode {
+            PipelineStageStatus::Instruction(ref mut instruction) => {
+                if let Some(raw) = instruction.raw_instr {
+                    // split instruction into fields
+                    match decode_raw_instr(raw) {
+                        Some(instr) => {
+                            instruction.decode_instr = Some(instr);
+                            let src_regs = instr.get_src_regs();
+                            let pending = src_regs.iter().any(|src| self.pending_reg.contains(src));
+                            // TODO:
+                            // Add logging here...
+                            // If source regs not pending, get values and create instruction object
+                            // If source regs pending, call fetch with blocked
+                        }
+                        None => {
+                            error!("Failed to decode raw instruction {raw}, passing on a NOOP");
+                            self.decode = PipelineStageStatus::Noop;
+                        }
+                    };
+                } else {
+                    error!("Received empty raw instruction field, passing on a NOOP");
+                    self.decode = PipelineStageStatus::Noop;
+                }
+            }
+            PipelineStageStatus::Stall => {
+                // if Noop/Stall, do nothing
+                info!("Stall is current state");
+            }
+            PipelineStageStatus::Noop => {
+                // if Noop/Stall, do nothing
+                info!("Noop is current state");
+            }
+        }
+
+        // NOTE: if we can just grab the registers' contents by value here, maybe
+        // we can simplify logic down the line...
+
+        todo!()
     }
 
-    // NOTE: Keep in mind, execute needs to know if memory is blocked when it's returning...
+    // NOTE: Make sure to set flag status in result for all ALU ops...
     fn pipeline_execute(&mut self, mem_blocked: bool) -> PipelineStageStatus {
+        info!("Pipeline: In execute stage");
         // execute appears to pass along a more "filled in" instruction object, look into this...
-        todo!()
+        match self.execute {
+            PipelineStageStatus::Instruction(mut instr) => {
+                info!("Have current instruction: {:?}", instr);
+                match instr.decode_instr {
+                    Some(ref mut instruction) => match instruction {
+                        Instruction::Type0 { opcode } => {
+                            info!("No work to be done, empty result");
+                            instr.instr_result = PipelineInstructionResult::EmptyResult;
+                        }
+                        Instruction::Type1 { opcode, immediate } => {
+                            info!("No work to be done, empty result");
+                        }
+                        Instruction::Type2 {
+                            opcode,
+                            reg_1,
+                            reg_2,
+                        } => match opcode {
+                            0 | 1 | 2 => {
+                                info!("Comparing general registers {reg_1} and {reg_2}");
+                                let flags = get_comparison_flags(
+                                    self.registers.general[*reg_1],
+                                    self.registers.general[*reg_2],
+                                );
+                                instr.instr_result =
+                                    PipelineInstructionResult::FlagResult { flags };
+                            }
+                            _ => {
+                                instr.instr_result = PipelineInstructionResult::EmptyResult;
+                            }
+                        },
+                        Instruction::Type3 {
+                            opcode,
+                            freg_1,
+                            freg_2,
+                        } => {
+                            info!("Comparing floating point registers {freg_1} and {freg_2}");
+                            let flags = get_comparison_flags(
+                                self.registers.float[*freg_1],
+                                self.registers.float[*freg_2],
+                            );
+                            instr.instr_result = PipelineInstructionResult::FlagResult { flags };
+                        }
+                        Instruction::Type4 {
+                            opcode,
+                            reg_1,
+                            immediate,
+                        } => match opcode {
+                            9 => {
+                                // TODO: Add overflow checks later...
+                                let data = self.registers.general[*reg_1]
+                                    .data
+                                    .add_immediate(*immediate);
+                                instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                    reg_group: RegisterGroup::General,
+                                    dest_reg: *reg_1,
+                                    data,
+                                }
+                            }
+                        },
+                        Instruction::Type5 {
+                            opcode,
+                            reg_1,
+                            reg_2,
+                            reg_3,
+                        } => {
+                            // TODO: Created signed and unsigned variants...
+                            match opcode {
+                                // ADDI
+                                0 => {
+                                    // TODO: Add overflow checks later...
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .add_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // SUBI
+                                1 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .sub_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // MULI
+                                2 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .mul_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // DIVI
+                                3 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .div_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // MODI
+                                4 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .mod_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // RBSI
+                                5 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .right_shift_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // XORI
+                                6 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .xor_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // ANDI
+                                7 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .and_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // ORI
+                                8 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .or_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // ADDU
+                                9 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .add_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // SUBU
+                                10 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .sub_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // MULU
+                                11 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .mul_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // DIVU
+                                12 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .div_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                // MODU
+                                13 => {
+                                    let data = self.registers.general[*reg_2]
+                                        .data
+                                        .mod_register(self.registers.general[*reg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::General,
+                                        dest_reg: *reg_1,
+                                        data,
+                                    }
+                                }
+                                _ => {
+                                    instr.instr_result = PipelineInstructionResult::EmptyResult;
+                                }
+                            }
+                        }
+                        Instruction::Type6 {
+                            opcode,
+                            freg_1,
+                            freg_2,
+                            freg_3,
+                        } => {
+                            match opcode {
+                                // ADDF
+                                0 => {
+                                    // TODO: Add overflow checks later...
+                                    let data = self.registers.float[*freg_2]
+                                        .data
+                                        .add_register(self.registers.float[*freg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::FloatingPoint,
+                                        dest_reg: *freg_1,
+                                        data,
+                                    }
+                                }
+                                // SUBF
+                                1 => {
+                                    let data = self.registers.float[*freg_2]
+                                        .data
+                                        .sub_register(self.registers.float[*freg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::FloatingPoint,
+                                        dest_reg: *freg_1,
+                                        data,
+                                    }
+                                }
+                                // MULF
+                                2 => {
+                                    let data = self.registers.float[*freg_2]
+                                        .data
+                                        .mul_register(self.registers.float[*freg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::FloatingPoint,
+                                        dest_reg: *freg_1,
+                                        data,
+                                    }
+                                }
+                                // DIVF
+                                3 => {
+                                    let data = self.registers.float[*freg_2]
+                                        .data
+                                        .div_register(self.registers.float[*freg_3].data);
+                                    instr.instr_result = PipelineInstructionResult::RegisterResult {
+                                        reg_group: RegisterGroup::FloatingPoint,
+                                        dest_reg: *freg_1,
+                                        data,
+                                    }
+                                }
+                                _ => {
+                                    instr.instr_result = PipelineInstructionResult::EmptyResult;
+                                }
+                            }
+                        }
+                    },
+                    None => {
+                        error!("Received non-decoded instruction in execute stage");
+                        panic!("Non-decoded instruction encountered in execute stage");
+                    }
+                }
+            }
+            PipelineStageStatus::Stall => {
+                // if Noop/Stall, do nothing
+                info!("Stall is current state");
+            }
+            PipelineStageStatus::Noop => {
+                // if Noop/Stall, do nothing
+                info!("Noop is current state");
+            }
+        }
+
+        // Don't need to check if we're blocked here by pending registers?
+        // if memory blocked, return Noop/Stall
+        if mem_blocked {
+            self.pipeline_decode(mem_blocked);
+            PipelineStageStatus::Stall
+        } else {
+            // if memory not blocked, return instruction object with result to memory
+            let completed_instr = self.execute; // TODO: Fill in result for this...
+            self.execute = self.pipeline_decode(mem_blocked);
+            completed_instr
+        }
     }
 
     #[must_use]
@@ -766,6 +1120,9 @@ pub enum PipelineInstructionResult {
         new_pc: u32,
         ret_reg_val: u32, // return register should be by convention, this is just the address
                           // value to store in it
+    },
+    FlagResult {
+        flags: [Option<bool>; FLAG_COUNT],
     },
     EmptyResult, // indicate an operation was completed, but there's no data to show for it (e.g.
                  // a store to memory)

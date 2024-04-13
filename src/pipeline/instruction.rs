@@ -1,10 +1,9 @@
-use std::ops::RangeBounds;
-
-use log::info;
+use log::{error, info};
 
 use crate::{
     common::PipelineStage,
     memory::memory_system::{LoadRequest, MemRequest, MemType},
+    register::register_system::{RegisterGroup, RET_REG},
 };
 
 const MASK_1: u32 = 0b1;
@@ -133,6 +132,77 @@ impl Instruction {
         }
     }
 
+    /// Returns the source registers associated with the given instruction
+    pub fn get_src_regs(&self) -> Vec<(RegisterGroup, usize)> {
+        match self {
+            Instruction::Type0 { opcode } => match opcode {
+                0 => {
+                    vec![(RegisterGroup::General, RET_REG)]
+                }
+                _ => Vec::new(),
+            },
+            Instruction::Type1 { opcode, immediate } => Vec::new(),
+            Instruction::Type2 {
+                opcode,
+                reg_1,
+                reg_2,
+            } => match opcode {
+                0 | 1 | 2 => {
+                    vec![
+                        (RegisterGroup::General, *reg_1),
+                        (RegisterGroup::General, *reg_2),
+                    ]
+                }
+                3 | 4 | 5 => {
+                    vec![(RegisterGroup::General, *reg_1)]
+                }
+                _ => Vec::new(),
+            },
+            Instruction::Type3 {
+                opcode,
+                freg_1,
+                freg_2,
+            } => {
+                vec![
+                    (RegisterGroup::General, *freg_1),
+                    (RegisterGroup::General, *freg_2),
+                ]
+            }
+            Instruction::Type4 {
+                opcode,
+                reg_1,
+                immediate,
+            } => match opcode {
+                6 | 7 | 8 => {
+                    vec![(RegisterGroup::General, *reg_1)]
+                }
+                _ => Vec::new(),
+            },
+            Instruction::Type5 {
+                opcode,
+                reg_1,
+                reg_2,
+                reg_3,
+            } => {
+                vec![
+                    (RegisterGroup::General, *reg_2),
+                    (RegisterGroup::General, *reg_3),
+                ]
+            }
+            Instruction::Type6 {
+                opcode,
+                freg_1,
+                freg_2,
+                freg_3,
+            } => {
+                vec![
+                    (RegisterGroup::General, *freg_2),
+                    (RegisterGroup::General, *freg_3),
+                ]
+            }
+        }
+    }
+
     pub fn is_load(&self) -> bool {
         match self {
             Instruction::Type2 { opcode, .. } => (3..=5).contains(opcode),
@@ -199,183 +269,152 @@ impl Instruction {
     //         }
     //     }
     // }
-
-    // TODO: rethink this...
-    pub fn get_mem_width(&self) -> Option<MemType> {
-        match self {
-            Instruction::Type0 { .. }
-            | Instruction::Type1 { .. }
-            | Instruction::Type3 { .. }
-            | Instruction::Type5 { .. }
-            | Instruction::Type6 { .. } => None,
-            Instruction::Type2 {
-                opcode,
-                reg_1,
-                reg_2,
-            } => match opcode {
-                0 | 3 => Some(MemType::Bits8),
-                1 | 4 => Some(MemType::Bits16),
-                2 | 5 => Some(MemType::Bits32),
-                _ => None,
-            },
-            Instruction::Type4 {
-                opcode,
-                reg_1,
-                immediate,
-            } => match opcode {
-                0 | 3 | 6 => Some(MemWidth::Bits8),
-                1 | 4 | 7 => Some(MemWidth::Bits16),
-                2 | 5 | 8 => Some(MemWidth::Bits32),
-                _ => None,
-            },
-        }
-    }
 }
 
-impl From<u32> for Instruction {
-    fn from(value: u32) -> Self {
-        let mut value = value;
-        //let instruction =
-        // type field is always 3 bits
-        // get first three bits
-        let instr_type = value & MASK_3;
-        value >>= 3;
-        // switch type off of that
-        match instr_type {
-            0 => {
-                // opcode takes one bit
-                let opcode = value & MASK_1;
-                // value >>= 1;
+/// Transform a raw u32 into an Instruction Object
+pub fn decode_raw_instr(raw: u32) -> Option<Instruction> {
+    let mut value = raw;
+    //let instruction =
+    // type field is always 3 bits
+    // get first three bits
+    let instr_type = value & MASK_3;
+    value >>= 3;
+    // switch type off of that
+    match instr_type {
+        0 => {
+            // opcode takes one bit
+            let opcode = value & MASK_1;
+            // value >>= 1;
 
-                // 28 remaining bits of padding to ignore
+            // 28 remaining bits of padding to ignore
 
-                Instruction::Type0 { opcode }
-            }
-            1 => {
-                // opcode takes four bits
-                let opcode = value & MASK_4;
-                value >>= 4;
+            Some(Instruction::Type0 { opcode })
+        }
+        1 => {
+            // opcode takes four bits
+            let opcode = value & MASK_4;
+            value >>= 4;
 
-                // immediate argument takes 21 bits
-                let immediate = value & MASK_21;
-                // value >>= 21;
-                // 4 remaining bits of padding to ignore
+            // immediate argument takes 21 bits
+            let immediate = value & MASK_21;
+            // value >>= 21;
+            // 4 remaining bits of padding to ignore
 
-                Instruction::Type1 { opcode, immediate }
-            }
-            2 => {
-                // opcode takes three bits
-                let opcode = value & MASK_3;
-                value >>= 3;
+            Some(Instruction::Type1 { opcode, immediate })
+        }
+        2 => {
+            // opcode takes three bits
+            let opcode = value & MASK_3;
+            value >>= 3;
 
-                // general register 1 argument takes 4 bits
-                let reg_1 = value & MASK_4;
-                value >>= 4;
+            // general register 1 argument takes 4 bits
+            let reg_1 = value & MASK_4;
+            value >>= 4;
 
-                // general register 2 argument takes 4 bits
-                let reg_2 = value & MASK_4;
-                // value >>= 4;
-                // 18 remaining bits of padding to ignore
+            // general register 2 argument takes 4 bits
+            let reg_2 = value & MASK_4;
+            // value >>= 4;
+            // 18 remaining bits of padding to ignore
 
-                Instruction::Type2 {
-                    opcode,
-                    reg_1,
-                    reg_2,
-                }
-            }
-            3 => {
-                // opcode takes one bit
-                let opcode = value & MASK_1;
-                value >>= 1;
+            Some(Instruction::Type2 {
+                opcode,
+                reg_1: reg_1.try_into().unwrap(),
+                reg_2: reg_2.try_into().unwrap(),
+            })
+        }
+        3 => {
+            // opcode takes one bit
+            let opcode = value & MASK_1;
+            value >>= 1;
 
-                // floating point register 1 argument takes 4 bits
-                let freg_1 = value & MASK_4;
-                value >>= 4;
+            // floating point register 1 argument takes 4 bits
+            let freg_1 = value & MASK_4;
+            value >>= 4;
 
-                // floating point register 2 argument takes 4 bits
-                let freg_2 = value & MASK_4;
-                // value >>= 4;
-                // 20 remaining bits of padding to ignore
+            // floating point register 2 argument takes 4 bits
+            let freg_2 = value & MASK_4;
+            // value >>= 4;
+            // 20 remaining bits of padding to ignore
 
-                Instruction::Type3 {
-                    opcode,
-                    freg_1,
-                    freg_2,
-                }
-            }
-            4 => {
-                // opcode takes four bits
-                let opcode = value & MASK_4;
-                value >>= 4;
+            Some(Instruction::Type3 {
+                opcode,
+                freg_1: freg_1.try_into().unwrap(),
+                freg_2: freg_2.try_into().unwrap(),
+            })
+        }
+        4 => {
+            // opcode takes four bits
+            let opcode = value & MASK_4;
+            value >>= 4;
 
-                // general register argument takes 4 bits
-                let reg_1 = value & MASK_4;
-                value >>= 4;
+            // general register argument takes 4 bits
+            let reg_1 = value & MASK_4;
+            value >>= 4;
 
-                // immediate argument takes 21 bits
-                let immediate = value & MASK_21;
-                // value >>= 21;
-                // 0 remaining bits of padding
+            // immediate argument takes 21 bits
+            let immediate = value & MASK_21;
+            // value >>= 21;
+            // 0 remaining bits of padding
 
-                Instruction::Type4 {
-                    opcode,
-                    reg_1,
-                    immediate,
-                }
-            }
-            5 => {
-                // opcode takes four bits
-                let opcode = value & MASK_4;
-                value >>= 4;
+            Some(Instruction::Type4 {
+                opcode,
+                reg_1: reg_1.try_into().unwrap(),
+                immediate,
+            })
+        }
+        5 => {
+            // opcode takes four bits
+            let opcode = value & MASK_4;
+            value >>= 4;
 
-                // general register 1 argument takes 4 bits
-                let reg_1 = value & MASK_4;
-                value >>= 4;
+            // general register 1 argument takes 4 bits
+            let reg_1 = value & MASK_4;
+            value >>= 4;
 
-                // general register 2 argument takes 4 bits
-                let reg_2 = value & MASK_4;
-                value >>= 4;
+            // general register 2 argument takes 4 bits
+            let reg_2 = value & MASK_4;
+            value >>= 4;
 
-                // general register 2 argument takes 4 bits
-                let reg_3 = value & MASK_4;
-                // value >>= 4;
-                // 13 remaining bits of padding to ignore
+            // general register 2 argument takes 4 bits
+            let reg_3 = value & MASK_4;
+            // value >>= 4;
+            // 13 remaining bits of padding to ignore
 
-                Instruction::Type5 {
-                    opcode,
-                    reg_1,
-                    reg_2,
-                    reg_3,
-                }
-            }
-            6 => {
-                // opcode takes two bits
-                let opcode = value & MASK_2;
-                value >>= 4;
+            Some(Instruction::Type5 {
+                opcode,
+                reg_1: reg_1.try_into().unwrap(),
+                reg_2: reg_2.try_into().unwrap(),
+                reg_3: reg_3.try_into().unwrap(),
+            })
+        }
+        6 => {
+            // opcode takes two bits
+            let opcode = value & MASK_2;
+            value >>= 4;
 
-                // general register 1 argument takes 4 bits
-                let freg_1 = value & MASK_4;
-                value >>= 4;
+            // general register 1 argument takes 4 bits
+            let freg_1 = value & MASK_4;
+            value >>= 4;
 
-                // general register 2 argument takes 4 bits
-                let freg_2 = value & MASK_4;
-                value >>= 4;
+            // general register 2 argument takes 4 bits
+            let freg_2 = value & MASK_4;
+            value >>= 4;
 
-                // general register 2 argument takes 4 bits
-                let freg_3 = value & MASK_4;
-                // value >>= 4;
-                // 15 remaining bits of padding to ignore
+            // general register 2 argument takes 4 bits
+            let freg_3 = value & MASK_4;
+            // value >>= 4;
+            // 15 remaining bits of padding to ignore
 
-                Instruction::Type6 {
-                    opcode,
-                    freg_1,
-                    freg_2,
-                    freg_3,
-                }
-            }
-            x => {
-                panic!("Invalid instruction type field: {x}")
-            }
+            Some(Instruction::Type6 {
+                opcode,
+                freg_1: freg_1.try_into().unwrap(),
+                freg_2: freg_2.try_into().unwrap(),
+                freg_3: freg_3.try_into().unwrap(),
+            })
+        }
+        x => {
+            error!("Invalid instruction type field: {x}");
+            None
         }
     }
 }

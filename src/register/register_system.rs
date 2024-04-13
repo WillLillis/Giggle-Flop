@@ -10,7 +10,7 @@ use crate::memory::memory_system::{MemBlock, MEM_BLOCK_WIDTH};
 
 pub const GEN_REG_COUNT: usize = 16;
 pub const FLOAT_REG_COUNT: usize = 16;
-pub const FLAG_COUNT: usize = 32;
+pub const FLAG_COUNT: usize = 6;
 pub const RET_REG: usize = GEN_REG_COUNT - 1;
 
 #[derive(Debug, Clone, Copy, Display, EnumString, EnumIter, PartialEq, Eq, Hash)]
@@ -31,7 +31,23 @@ pub enum FlagIndex {
     ZO = 5, // Zero
 }
 
-#[derive(Debug, Clone, Copy)]
+/// Returns the set of flag values resulting from a comparison of the two values
+pub fn get_comparison_flags(reg_1: Register, reg_2: Register) -> [Option<bool>; FLAG_COUNT] {
+    let mut flags = [None; FLAG_COUNT];
+    flags[FlagIndex::EQ as usize] =
+        Some(reg_1 == reg_2);
+    flags[FlagIndex::LT as usize] = 
+        Some(reg_1 < reg_2);
+    flags[FlagIndex::LT as usize] = 
+        Some(reg_1 > reg_2);
+    // No overflow with comparisons...
+    // No sign with comparisons...
+    // No zero with comparisons...
+
+    flags
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Register {
     pub data: MemBlock,
 }
@@ -82,9 +98,9 @@ impl RegisterSet {
         info!(
             "Incrementing program counter, old: {}, new: {}",
             self.program_counter,
-            self.program_counter + MEM_BLOCK_WIDTH
+            self.program_counter + MEM_BLOCK_WIDTH as u32
         );
-        self.program_counter += MEM_BLOCK_WIDTH;
+        self.program_counter += MEM_BLOCK_WIDTH as u32;
     }
 
     /// Writes a value to a "normal" (non-PC) register
