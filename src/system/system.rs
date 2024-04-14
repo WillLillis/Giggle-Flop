@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use iced::futures::future::pending;
 use log::{error, info};
 
 use crate::instruction::instruction::{decode_raw_instr, Instruction, RawInstruction};
@@ -70,13 +71,12 @@ impl System {
         // Load up a sample program
         // we will simply add two numbers inside two registers
         memory_system.force_store(128, MemBlock::Unsigned32(1));
-        let load_instr = 0b0000_0000_0000_0100_0000_0000_1001_0100;
-        let add_instr = 0b0000_0000_0000_0001_1001_0000_1000_1101;
-        let tmp_add_instr = decode_raw_instr(add_instr);
-        let tmp_load_instr = decode_raw_instr(load_instr);
-        println!("HEY RIGHT HERE {tmp_add_instr:?}");
-        println!("HEY RIGHT HERE {tmp_load_instr:?}");
-        memory_system.force_store(0, MemBlock::Unsigned32(add_instr));
+        let add_imm_instr = 0b0_0000_0000_0000_0000_0001_0000_1001_100;
+        // let load_instr = 0b0000_0000_0000_0100_0000_0000_1001_0100;
+        // let add_instr = 0b0000_0000_0000_0001_1001_0000_1000_1101;
+        // let tmp_add_instr = decode_raw_instr(add_imm_instr);
+        // let tmp_load_instr = decode_raw_instr(load_instr);
+        memory_system.force_store(0, MemBlock::Unsigned32(add_imm_instr));
 
         Self {
             clock: 0,
@@ -206,10 +206,10 @@ impl System {
         }
     }
 
-    fn pipeline_decode(&mut self, mem_blocked: bool) -> PipelineStageStatus {
+    fn pipeline_decode(&mut self, exec_blocked: bool) -> PipelineStageStatus {
         info!(
-            "Pipeline::Decode: In decode stage, current instruction: {:?}, memory blocked: {}",
-            self.decode, mem_blocked
+            "Pipeline::Decode: In decode stage, current instruction: {:?}, exec blocked: {}",
+            self.decode, exec_blocked
         );
         let mut pending_regs = false;
         match self.decode {
@@ -217,10 +217,12 @@ impl System {
                 if let Some(raw) = instruction.raw_instr {
                     // split instruction into fields
                     if let Some(instr) = decode_raw_instr(raw) {
-                        instruction.decode_instr = Some(instr);
                         let src_regs = instr.get_src_regs();
                         pending_regs = src_regs.iter().any(|src| self.pending_reg.contains(src));
-                        info!("Pipeline::Decode: Pending registers: {pending_regs}");
+                        info!("Pipeline::Decode: Pending source registers: {pending_regs}");
+                        if !pending_regs {
+                            instruction.decode_instr = Some(instr);
+                        }
                     } else {
                         error!("Pipeline::Decode: Failed to decode raw instruction {raw}, passing on a NOOP");
                         self.decode = PipelineStageStatus::Noop;
@@ -243,9 +245,9 @@ impl System {
         }
         // NOTE: if we can just grab the registers' contents by value here, maybe
         // we can simplify logic down the line...
-        match (pending_regs, mem_blocked) {
+        match (pending_regs, exec_blocked) {
             // instruction missing operands OR execute is blocked
-            (true, _) | (_, true) => {
+            (_, true) => {
                 info!("Pipeline::Decode: Calling fetch with blocked status");
                 // BUG: Later stages incorrectly get stuck in blocked state, we ignore every
                 // instruction coming out of fetch...
@@ -253,11 +255,19 @@ impl System {
                 info!("Pipeline::Decode: Passing on a Stall status");
                 PipelineStageStatus::Stall
             }
-            // instruction has operands, memory (execute) not blocked
+            (true, _) => {
+                info!("Pipeline::Decode: Calling fetch with blocked status");
+                // BUG: Later stages incorrectly get stuck in blocked state, we ignore every
+                // instruction coming out of fetch...
+                self.pipeline_fetch(true); // shouldn't get anything back because we're blocked...
+                info!("Pipeline::Decode: Passing on a Noop status");
+                PipelineStageStatus::Noop
+            }
+            // instruction has operands, execute not blocked
             (false, false) => {
                 let completed_instr = self.decode;
                 info!("Pipeline::Decode: Calling fetch with unblocked status");
-                self.decode = self.pipeline_fetch(mem_blocked);
+                self.decode = self.pipeline_fetch(exec_blocked);
                 info!(
                     "Pipeline::Decode: Instruction saved for next decode: {:?}",
                     self.decode
@@ -349,7 +359,8 @@ impl System {
                                     reg_group: RegisterGroup::General,
                                     dest_reg: *reg_1,
                                     data,
-                                }
+                                };
+                                info!("Pipeline::Execute: instruction: {:?}", self.execute)
                             }
                             _ => {
                                 instr.instr_result = PipelineInstructionResult::Empty;
@@ -673,22 +684,26 @@ impl System {
         // BUG: Look here for blocked issue?
         // Don't need to check if we're blocked here by pending registers?
         // if memory blocked, return Noop/Stall
+        // if mem_blocked {
+        //     info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}");
+        //     self.pipeline_decode(mem_blocked);
+        //
+        // } else {
+        // if memory not blocked, return instruction object with result to memory
+        let completed_instr = self.execute; // TODO: Fill in result for this...
+        info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}, saving result to execute's state");
+        self.execute = self.pipeline_decode(mem_blocked);
         if mem_blocked {
-            info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}");
-            self.pipeline_decode(mem_blocked);
             info!("Pipeline::Execute: Returning Stall");
             PipelineStageStatus::Stall
         } else {
-            // if memory not blocked, return instruction object with result to memory
-            let completed_instr = self.execute; // TODO: Fill in result for this...
-            info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}, saving result to execute's state");
-            self.execute = self.pipeline_decode(mem_blocked);
             info!(
                 "Pipeline::Execute: Returning instruction {:?}",
                 completed_instr
             );
             completed_instr
         }
+        // }
     }
 
     #[allow(clippy::too_many_lines)] // TODO: Fix this later...
@@ -810,7 +825,7 @@ impl System {
             PipelineStageStatus::Stall => {
                 // if Noop/Stall, do nothing
                 info!("Pipeline::Memory: Stall is current state");
-                self.memory = self.pipeline_execute(true);
+                self.memory = self.pipeline_execute(false);
                 PipelineStageStatus::Stall
             }
             PipelineStageStatus::Noop => {
