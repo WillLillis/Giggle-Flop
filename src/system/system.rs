@@ -2,16 +2,29 @@ use std::collections::HashSet;
 
 use log::{error, info};
 
-use crate::common::PipelineStage;
+use crate::instruction::instruction::{decode_raw_instr, Instruction, RawInstruction};
 use crate::memory::memory_system::{
-    LoadRequest, LoadResponse, MemRequest, MemResponse, MemType, Memory, MEM_BLOCK_WIDTH,
+    LoadRequest, LoadResponse, MemRequest, MemResponse, MemType, Memory,
 };
-use crate::pipeline::instruction::{decode_raw_instr, Instruction, RawInstruction};
 use crate::register::register_system::{
     get_comparison_flags, RegisterGroup, RegisterSet, FLAG_COUNT, RET_REG,
 };
 
 use crate::memory::memory_system::MemBlock;
+
+pub type Cycle = usize;
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Default)]
+pub enum PipelineStage {
+    Fetch,
+    Decode,
+    Execute,
+    Memory,
+    WriteBack,
+    #[default]
+    System, // for testing calls from outside the pipeline
+}
 
 pub struct System {
     pub clock: usize,
@@ -26,9 +39,6 @@ pub struct System {
     pub pending_reg: HashSet<(RegisterGroup, usize)>,
 }
 
-// TODO: Figure out what these todo comments mean (from writeback)
-// TODO: clock increments cycles counter
-// TODO: begin new cycle
 impl System {
     // For debugging purposes, will need to make this
     // configurable later...
@@ -60,12 +70,13 @@ impl System {
     }
 
     fn pipeline_run(&mut self) {
+        info!("Entering the pipeline");
         self.pipeline_writeback()
     }
 
     fn pipeline_fetch(&mut self, decode_blocked: bool) -> PipelineStageStatus {
         info!(
-            "Pipeline: In fetch stage, current PC: {}, current instruction: {:?}",
+            "Pipeline::Fetch: In fetch stage, current PC: {}, current instruction: {:?}",
             self.registers.program_counter, self.fetch
         );
         match (self.fetch, decode_blocked) {
@@ -77,7 +88,7 @@ impl System {
                     width: MemType::Unsigned32,
                 });
                 info!(
-                    "No current instruction, issuing fetch to memory subsystem: {:?}",
+                    "Pipeline::Fetch: No current instruction, issuing fetch to memory subsystem: {:?}",
                     req
                 );
                 // TODO: Lots of cleanup here with the memory system
@@ -86,42 +97,40 @@ impl System {
                 match resp {
                     Ok(MemResponse::Load(LoadResponse { data })) => {
                         info!(
-                            "Got valid load response, incrementing the PC from {} to {}",
-                            self.registers.program_counter,
-                            self.registers.program_counter + MEM_BLOCK_WIDTH as u32
+                            "Pipeline::Fetch: Got valid load response",
                         );
-                        self.registers.program_counter += MEM_BLOCK_WIDTH as u32;
+                        self.registers.step_pc();
                         // match data.get_contents(self.registers.program_counter as usize) {
                         match data.get_contents(req.get_address()) {
                             Some(conts) => {
                                 let raw = match conts {
                                     MemBlock::Unsigned8(data) => {
                                         error!(
-                                            "Received u8 for instruction fetch, translating to u32"
+                                            "Pipeline::Fetch: Received u8 for instruction fetch, translating to u32"
                                         );
                                         data as u32
                                     }
                                     MemBlock::Unsigned16(data) => {
-                                        error!("Received u16 for instruction fetch, translating to u32");
+                                        error!("Pipeline::Fetch: Received u16 for instruction fetch, translating to u32");
                                         data as u32
                                     }
                                     MemBlock::Unsigned32(data) => data,
                                     MemBlock::Signed8(data) => {
                                         error!(
-                                            "Received i8 for instruction fetch, translating to u32"
+                                            "Pipeline::Fetch: Received i8 for instruction fetch, translating to u32"
                                         );
                                         data as u32
                                     }
                                     MemBlock::Signed16(data) => {
-                                        error!("Received i16 for instruction fetch, translating to u32");
+                                        error!("Pipeline::Fetch: Received i16 for instruction fetch, translating to u32");
                                         data as u32
                                     }
                                     MemBlock::Signed32(data) => {
-                                        error!("Received i32 for instruction fetch, translating to u32");
+                                        error!("Pipeline::Fetch: Received i32 for instruction fetch, translating to u32");
                                         data as u32
                                     }
                                     MemBlock::Float32(data) => {
-                                        error!("Received f32 for instruction fetch, translating to u32");
+                                        error!("Pipeline::Fetch: Received f32 for instruction fetch, translating to u32");
                                         data as u32
                                     }
                                 };
@@ -132,14 +141,11 @@ impl System {
                                         decode_instr: None,
                                         instr_result: PipelineInstructionResult::EmptyResult,
                                     });
-                                info!(
-                                    "Pipeline::Fetch: Passing on raw instruction: {:?}",
-                                    decoded
-                                );
+                                info!("Pipeline::Fetch: Passing on raw instruction: {:?}", decoded);
                                 return decoded;
                             }
                             None => {
-                                error!("Received empty memory response, treating as a NOOP");
+                                error!("Pipeline::Fetch: Received empty memory response, treating as a NOOP");
                                 return PipelineStageStatus::Noop;
                             }
                         }
@@ -153,18 +159,18 @@ impl System {
                         return PipelineStageStatus::Stall;
                     }
                     Ok(MemResponse::StoreComplete) => {
-                        error!("Got StoreComplete response for fetch request");
+                        error!("Pipeline::Fetch: Got StoreComplete response for fetch request");
                         return PipelineStageStatus::Stall;
                     }
                     Err(e) => {
-                        error!("Got error {e} from memory subsystem, translating into NOOP");
+                        error!("Pipeline::Fetch: Got error {e} from memory subsystem, translating into NOOP");
                         return PipelineStageStatus::Noop;
                     }
                 }
             }
             (Some(instr), false) => {
                 info!(
-                    "Have instruction {:?}, decode is unblocked, returning instruction result",
+                    "Pipeline::Fetch: Have instruction {:?}, decode is unblocked, returning instruction result",
                     instr
                 );
                 return PipelineStageStatus::Instruction(PipelineInstruction {
@@ -175,7 +181,7 @@ impl System {
             }
             (Some(instr), true) => {
                 info!(
-                    "Have instruction {:?}, decode is blocked, returning NOOP",
+                    "Pipeline::Fetch: Have instruction {:?}, decode is blocked, returning NOOP",
                     instr
                 );
                 return PipelineStageStatus::Noop;
@@ -183,10 +189,9 @@ impl System {
         }
     }
 
-    // NOTE: Keep in mind, execute needs to pass along blocked status to D from M
     fn pipeline_decode(&mut self, mem_blocked: bool) -> PipelineStageStatus {
         info!(
-            "Pipeline: In decode stage, current instruction: {:?}, memory blocked: {}",
+            "Pipeline::Decode: In decode stage, current instruction: {:?}, memory blocked: {}",
             self.decode, mem_blocked
         );
         let mut pending_regs = false;
@@ -205,12 +210,14 @@ impl System {
                             // Add logging here...
                         }
                         None => {
-                            error!("Failed to decode raw instruction {raw}, passing on a NOOP");
+                            error!("Pipeline::Decode: Failed to decode raw instruction {raw}, passing on a NOOP");
                             self.decode = PipelineStageStatus::Noop;
                         }
                     };
                 } else {
-                    error!("Received empty raw instruction field, passing on a NOOP");
+                    error!(
+                        "Pipeline::Decode: Received empty raw instruction field, passing on a NOOP"
+                    );
                     self.decode = PipelineStageStatus::Noop;
                 }
             }
@@ -256,7 +263,7 @@ impl System {
                 }
                 // BUG: Issue is here???
                 info!(
-                    "Returning decoded instruction {:?} to execute",
+                    "Pipeline::Decode: Returning decoded instruction {:?} to execute",
                     completed_instr
                 );
                 return completed_instr;
@@ -267,7 +274,7 @@ impl System {
     // NOTE: Make sure to set flag status in result for all ALU ops...
     fn pipeline_execute(&mut self, mem_blocked: bool) -> PipelineStageStatus {
         info!(
-            "Pipeline: In execute stage, current instruction: {:?}, memory blocked: {}",
+            "Pipeline::Execute: In execute stage, current instruction: {:?}, memory blocked: {}",
             self.execute, mem_blocked
         );
         // execute appears to pass along a more "filled in" instruction object, look into this...
@@ -276,11 +283,11 @@ impl System {
                 info!("Pipeline::Execute: Have current instruction: {:?}", instr);
                 match instr.decode_instr {
                     Some(ref mut instruction) => match instruction {
-                        Instruction::Type0 { opcode } => {
+                        Instruction::Type0 { .. } => {
                             info!("Pipeline::Execute: No work to be done, empty result");
                             instr.instr_result = PipelineInstructionResult::EmptyResult;
                         }
-                        Instruction::Type1 { opcode, immediate } => {
+                        Instruction::Type1 { .. } => {
                             info!("Pipeline::Execute: No work to be done, empty result");
                         }
                         Instruction::Type2 {
@@ -638,7 +645,9 @@ impl System {
                         }
                     },
                     None => {
-                        error!("Received non-decoded instruction in execute stage");
+                        error!(
+                            "Pipeline::Execute: Received non-decoded instruction in execute stage"
+                        );
                         panic!("Non-decoded instruction encountered in execute stage");
                     }
                 }
@@ -657,12 +666,19 @@ impl System {
         // Don't need to check if we're blocked here by pending registers?
         // if memory blocked, return Noop/Stall
         if mem_blocked {
+            info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}");
             self.pipeline_decode(mem_blocked);
+            info!("Pipeline::Execute: Returning Stall");
             PipelineStageStatus::Stall
         } else {
             // if memory not blocked, return instruction object with result to memory
             let completed_instr = self.execute; // TODO: Fill in result for this...
+            info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}, saving result to execute's state");
             self.execute = self.pipeline_decode(mem_blocked);
+            info!(
+                "Pipeline::Execute: Returning instruction {:?}",
+                completed_instr
+            );
             completed_instr
         }
     }
@@ -685,7 +701,7 @@ impl System {
                             // If value returned, call E non-blocked
                             // If wait returned, call E with blocked
                             info!(
-                                "Associated memory request: {:?}, issuing to memory system",
+                                "Pipeline::Memory: Associated memory request: {:?}, issuing to memory system",
                                 req
                             );
                             let resp = self.memory_system.request(&req);
@@ -717,7 +733,7 @@ impl System {
 
                                     // return instruction with result
                                     info!(
-                                        "Passing completed instruction back to writeback: {:?}",
+                                        "Pipeline::Memory: Passing completed instruction back to writeback: {:?}",
                                         completed_instr
                                     );
                                     return PipelineStageStatus::Instruction(completed_instr);
@@ -733,15 +749,15 @@ impl System {
                                             reg_info
                                         }
                                         None => {
-                                            error!("Failed to extract register group and number information from instruction {:?} (Assumed to be Load)", instr);
-                                            panic!("Failed to extract destination register info from instruction");
+                                            error!("Pipeline::Memory: Failed to extract register group and number information from instruction {:?} (Assumed to be Load)", instr);
+                                            panic!("Pipeline::Memory: Failed to extract destination register info from instruction");
                                         }
                                     };
                                     let address = req.get_address();
                                     let data = load_resp
                                         .data
                                         .get_contents(address)
-                                        .expect("Failed to extract data from memory response");
+                                        .expect("Pipeline::Memory: Failed to extract data from memory response");
 
                                     let mut completed_instr = instr;
                                     completed_instr.instr_result =
@@ -759,14 +775,16 @@ impl System {
 
                                     // return instruction with result
                                     info!(
-                                        "Passing completed instruction back to writeback: {:?}",
+                                        "Pipeline::Memory: Passing completed instruction back to writeback: {:?}",
                                         completed_instr
                                     );
                                     return PipelineStageStatus::Instruction(completed_instr);
                                 }
                                 Err(e) => {
-                                    error!("Request returned error: {e}");
-                                    panic!("Error returned from memory system: {e}");
+                                    error!("Pipeline::Memory: Request returned error: {e}");
+                                    panic!(
+                                        "Pipeline::Memory: Error returned from memory system: {e}"
+                                    );
                                 }
                             }
                         } else {
@@ -781,8 +799,8 @@ impl System {
                         }
                     }
                     None => {
-                        error!("Recieved non-decoded instruction in pipeline memory stage");
-                        panic!("Recieved non-decoded instruction in pipeline memory stage");
+                        error!("Pipeline::Memory: Recieved non-decoded instruction in pipeline memory stage");
+                        panic!("Pipeline::Memory: Recieved non-decoded instruction in pipeline memory stage");
                     }
                 }
             }
@@ -819,7 +837,7 @@ impl System {
                         //  - write result to registers
                         //  - update pending registers
                         info!(
-                            "Instruction has register result. Group: {}, Number: {}, Data: {}",
+                            "Pipeline::Writeback: Instruction has register result. Group: {}, Number: {}, Data: {}",
                             reg_group, dest_reg, data
                         );
                         info!("Pipeline::Writeback: Writing result to register");
@@ -827,7 +845,7 @@ impl System {
                         info!("Pipeline::Writeback: Updating pending registers");
                         if self.pending_reg.remove(&(reg_group, dest_reg)) {
                             info!(
-                                "Register group {}, number {} cleared from pending",
+                                "Pipeline::Writeback: Register group {}, number {} cleared from pending",
                                 reg_group, dest_reg
                             );
                         }
@@ -848,7 +866,7 @@ impl System {
                         // if JumpServiceRoutine
                         //  - update PC and return reg
                         info!(
-                            "Instruction has JSR result. New PC: {}, Return Register Value: {}",
+                            "Pipeline::Writeback: Instruction has JSR result. New PC: {}, Return Register Value: {}",
                             new_pc, ret_reg_val
                         );
                         self.registers.program_counter = new_pc;
@@ -883,14 +901,17 @@ impl System {
         info!("Pipeline::Writeback: Calling memory stage");
         self.writeback = self.pipeline_memory();
         info!(
-            "Saving message returned from memory stage: {:?}",
+            "Pipeline::Writeback: Saving message returned from memory stage: {:?}",
             self.writeback
         );
     }
 
     pub fn step(&mut self) {
+        info!("Starting a system step");
         self.pipeline_run();
+        info!("Updating the clock");
         self.memory_system.update_clock();
+        info!("Incrementing the clock");
         self.clock += 1;
     }
 }
@@ -924,7 +945,7 @@ impl PipelineInstruction {
             Some(Instruction::Type4 {
                 opcode,
                 reg_1,
-                immediate,
+                ..
             }) => match opcode {
                 0 | 1 | 2 | 3 | 4 | 5 | 9 => Some((RegisterGroup::General, reg_1)),
                 _ => None,
@@ -936,6 +957,7 @@ impl PipelineInstruction {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum PipelineInstructionResult {
     RegisterResult {

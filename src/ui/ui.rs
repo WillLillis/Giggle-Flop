@@ -42,16 +42,12 @@ enum Message {
 
 #[derive(Clone, Copy)]
 struct Pane {
-    id: usize,
-    pub is_pinned: bool,
+    // TODO: Add data in here as necessary...
 }
 
 impl Pane {
-    fn new(id: usize) -> Self {
-        Self {
-            id,
-            is_pinned: false,
-        }
+    fn new() -> Self {
+        Self {}
     }
 }
 
@@ -66,7 +62,7 @@ impl GiggleFlopUI {
             }
             groups
         };
-        let (panes, _) = pane_grid::State::new(Pane::new(0));
+        let (panes, _) = pane_grid::State::new(Pane::new());
         GiggleFlopUI {
             memory_levels,
             current_memory_level: system.memory_system.num_levels() - 1,

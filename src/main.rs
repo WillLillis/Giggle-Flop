@@ -1,23 +1,15 @@
 #![warn(clippy::all, clippy::pedantic)]
 
 // TODO: Do these need to be here?
-mod common;
 mod memory;
 mod ui;
 mod system;
 mod register;
-mod execution;
-mod pipeline;
+mod instruction;
 
 use anyhow::{anyhow, Result};
 // TODO: Probably delete dialoguer dependency...
-use dialoguer::{theme::ColorfulTheme, Input, Select};
-
-use execution::execution_state::ExecutionState;
-use register::register_system::RegisterSet;
-
-use crate::common::{Cycle, PipelineStage};
-use crate::memory::memory_system::{MemRequest, Memory, StoreRequest};
+//use dialoguer::{theme::ColorfulTheme, Input, Select};
 
 fn main() -> Result<()> {
     flexi_logger::Logger::try_with_str("info")?.start()?;

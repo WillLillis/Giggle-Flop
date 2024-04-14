@@ -3,14 +3,15 @@
 use std::collections::VecDeque;
 use std::fmt::Display;
 
-use crate::common::Cycle;
 use crate::memory::memory_block::MemBlock;
 use crate::memory::memory_line::MemLine;
 use crate::memory::memory_system::{
     LoadRequest, LoadResponse, MemRequest, MemResponse, MEM_BLOCK_WIDTH,
 };
+use crate::system::system::Cycle;
 
 use anyhow::{anyhow, Result};
+use log::error;
 
 #[derive(Debug, Clone, Default)]
 pub struct MemoryLevel {
@@ -54,11 +55,12 @@ impl MemoryLevel {
         }
     }
 
-
     // for testing/ debugging, get rid of later (TODO:)
     pub fn force_store(&mut self, address: usize, data: MemBlock) {
         let idx = self.address_index(address);
-        self.contents[idx].write(address, data);
+        if let Err(e) = self.contents[idx].write(address, data) {
+            error!("force_store: write to {address} with {:?} failed -- Error {e}", data);
+        }
     }
 
     /// Issues a new load request, or checks the status of an existing (matching)

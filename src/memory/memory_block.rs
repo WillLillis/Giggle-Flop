@@ -1,9 +1,10 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-use std::{fmt::Display, ops::{Add, BitAnd, BitOr, BitXor}};
+use std::{fmt::Display, ops::{BitAnd, BitOr, BitXor}};
 
 use log::info;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum MemBlock {
     Unsigned8(u8),

@@ -2,7 +2,7 @@
 #![allow(clippy::module_name_repetitions)]
 use std::borrow::Cow;
 
-use crate::common::{Cycle, PipelineStage};
+use crate::system::system::{Cycle, PipelineStage};
 pub use crate::memory::memory_block::MemBlock;
 use crate::memory::memory_level::MemoryLevel;
 use crate::memory::memory_line::MemLine;
@@ -16,6 +16,7 @@ pub const N_ADDRESS_BITS: usize = 21;
 #[allow(dead_code, clippy::cast_possible_truncation)]
 pub const ADDRESS_SPACE_SIZE: usize = 2usize.pow(N_ADDRESS_BITS as u32);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MemType {
     Unsigned8,
@@ -338,6 +339,7 @@ impl Memory {
         self.levels.len()
     }
 
+    #[allow(dead_code)]
     /// Prints the latency, current request, request queue, and contents of the
     /// given memory `level`
     pub fn print_level(&self, level: usize) -> Result<()> {

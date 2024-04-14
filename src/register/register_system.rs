@@ -131,7 +131,7 @@ impl RegisterSet {
                     return;
                 }
                 match data {
-                    MemBlock::Float32(inner) => {
+                    MemBlock::Float32(_) => {
                         info!("Wrote {data} to floating point register {num}");
                         self.float[num] = Register::new(data);
                     }
@@ -151,6 +151,8 @@ impl RegisterSet {
         }
     }
 
+    // NOTE: Use this once we have the pipeline fixed?
+    #[allow(dead_code)]
     pub fn write_status(&mut self, idx: FlagIndex, data: bool) {
         info!("Setting status flag {idx} to {data}");
         self.status.set(idx as usize, data);

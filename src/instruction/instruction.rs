@@ -1,9 +1,9 @@
 use log::{error, info};
 
 use crate::{
-    common::PipelineStage,
     memory::memory_system::{LoadRequest, MemRequest, MemType},
     register::register_system::{RegisterGroup, RET_REG},
+    system::system::PipelineStage,
 };
 
 const MASK_1: u32 = 0b1;
@@ -13,28 +13,6 @@ const MASK_4: u32 = 0b1111;
 const MASK_21: u32 = 0b111111111111111111111;
 
 pub type RawInstruction = u32;
-
-#[derive(Debug, Clone, PartialEq, Copy)]
-pub enum InstructionResult {
-    UnsignedIntegerResult { dest: usize, val: u32 },
-    IntegerResult { dest: usize, val: i32 },
-    FloatResult { dest: usize, val: f32 },
-    AddressResult { addr: u32 },
-}
-
-#[derive(Debug)]
-pub enum DataType {
-    Unsigned,
-    Signed,
-    Float,
-}
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct InstructionState {
-    pub instr: Option<Instruction>,
-    pub val: Option<InstructionResult>,
-    pub stall: bool,
-}
 
 #[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub enum Instruction {
@@ -75,21 +53,13 @@ pub enum Instruction {
 }
 
 impl Instruction {
-    pub fn is_mem_instr(&self) -> bool {
-        match self {
-            Instruction::Type0 { opcode } => *opcode == 0,
-            Instruction::Type1 { .. } | Instruction::Type4 { .. } => true,
-            _ => false,
-        }
-    }
-
     /// Returns the associated `MemoryRequest` for an instruction if appropriate
     pub fn get_mem_req(&self, issuer: Option<PipelineStage>) -> Option<MemRequest> {
         info!("Generating memory request for instruction {:?}", self);
         match self {
             Instruction::Type2 {
                 opcode,
-                reg_1,
+                reg_1: _,
                 reg_2,
             } => {
                 let mem_type = match opcode {
@@ -108,7 +78,7 @@ impl Instruction {
             }
             Instruction::Type4 {
                 opcode,
-                reg_1,
+                reg_1: _,
                 immediate,
             } => {
                 let mem_type = match opcode {
@@ -141,7 +111,7 @@ impl Instruction {
                 }
                 _ => Vec::new(),
             },
-            Instruction::Type1 { opcode, immediate } => Vec::new(),
+            Instruction::Type1 { .. } => Vec::new(),
             Instruction::Type2 {
                 opcode,
                 reg_1,
@@ -159,7 +129,7 @@ impl Instruction {
                 _ => Vec::new(),
             },
             Instruction::Type3 {
-                opcode,
+                opcode: _,
                 freg_1,
                 freg_2,
             } => {
@@ -171,7 +141,7 @@ impl Instruction {
             Instruction::Type4 {
                 opcode,
                 reg_1,
-                immediate,
+                immediate: _,
             } => match opcode {
                 6 | 7 | 8 => {
                     vec![(RegisterGroup::General, *reg_1)]
@@ -179,8 +149,8 @@ impl Instruction {
                 _ => Vec::new(),
             },
             Instruction::Type5 {
-                opcode,
-                reg_1,
+                opcode: _,
+                reg_1: _,
                 reg_2,
                 reg_3,
             } => {
@@ -190,8 +160,8 @@ impl Instruction {
                 ]
             }
             Instruction::Type6 {
-                opcode,
-                freg_1,
+                opcode: _,
+                freg_1: _,
                 freg_2,
                 freg_3,
             } => {
@@ -202,73 +172,6 @@ impl Instruction {
             }
         }
     }
-
-    pub fn is_load(&self) -> bool {
-        match self {
-            Instruction::Type2 { opcode, .. } => (3..=5).contains(opcode),
-            Instruction::Type4 { opcode, .. } => (0..=5).contains(opcode),
-            _ => false,
-        }
-    }
-
-    pub fn is_store_instr(&self) -> bool {
-        match self {
-            Instruction::Type4 { opcode, .. } => {
-                return *opcode == 6 || *opcode == 7 || *opcode == 8;
-            }
-            _ => false,
-        }
-    }
-
-    pub fn is_alu_instr(&self) -> bool {
-        match self {
-            Instruction::Type0 { .. } | Instruction::Type1 { .. } => false,
-            Instruction::Type2 { opcode, .. } => match opcode {
-                0 | 1 | 2 => true,
-                _ => false,
-            },
-            Instruction::Type3 { .. } => true,
-            Instruction::Type4 { opcode, .. } => match opcode {
-                9 => true,
-                _ => false,
-            },
-            Instruction::Type5 { .. } | Instruction::Type6 { .. } => true,
-        }
-    }
-
-    pub fn is_jump_instr(&self) -> bool {
-        match self {
-            Instruction::Type0 { opcode } => match opcode {
-                0 => true,
-                _ => false,
-            },
-            Instruction::Type1 { .. } => true,
-            Instruction::Type2 { .. }
-            | Instruction::Type3 { .. }
-            | Instruction::Type4 { .. }
-            | Instruction::Type5 { .. }
-            | Instruction::Type6 { .. } => false,
-        }
-    }
-
-    // TODO: Implement this once we fix loading instructions
-    // pub fn get_load_type(&self) -> Option<MemType> {
-    //     match self {
-    //         Instruction::Type0 { .. } | Instruction::Type1 { .. } | Instruction::Type3 {..}  => None,
-    //         Instruction::Type2 { opcode, ..} => {
-    //             match opcode {
-    //                 3|4|5 => Some(MemType::Unsigned),
-    //                 _ => None
-    //             }
-    //         }
-    //         Instruction::Type4 { opcode, ..} => {
-    //             match opcode {
-    //                 0|1|2 => Some(MemType::Unsigned),
-    //                 _ => None,
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 /// Transform a raw u32 into an Instruction Object
