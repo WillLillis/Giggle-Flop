@@ -11,7 +11,7 @@ use crate::system::system::System;
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 
-pub fn enter_ui() -> iced::Result {
+pub fn enter() -> iced::Result {
     iced::program("Giggle-Flop", GiggleFlopUI::update, GiggleFlopUI::view)
         .theme(GiggleFlopUI::theme)
         .run()
@@ -28,7 +28,7 @@ struct GiggleFlopUI {
     focus: Option<pane_grid::Pane>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum Message {
     Scrolled(scrollable::Viewport),
     SelectMemoryLevel(usize),
@@ -54,7 +54,7 @@ impl Pane {
 impl GiggleFlopUI {
     fn new() -> Self {
         let system = System::default();
-        let memory_levels = (0..system.memory_system.num_levels()).into_iter().collect();
+        let memory_levels = (0..system.memory_system.num_levels()).collect();
         let register_groups = {
             let mut groups = Vec::new();
             for group in RegisterGroup::iter() {
@@ -264,11 +264,11 @@ impl GiggleFlopUI {
 
             let title_bar = pane_grid::TitleBar::new(title)
                 .padding(10)
-                .style(style::title_bar_style);
+                .style(style::title_bar);
 
             pane_grid::Content::new(self.get_memory_element())
                 .title_bar(title_bar)
-                .style(style::pane_style)
+                .style(style::pane)
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -288,11 +288,11 @@ impl GiggleFlopUI {
 
             let title_bar = pane_grid::TitleBar::new(title)
                 .padding(10)
-                .style(style::title_bar_style);
+                .style(style::title_bar);
 
             pane_grid::Content::new(self.get_register_element())
                 .title_bar(title_bar)
-                .style(style::pane_style)
+                .style(style::pane)
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -312,11 +312,11 @@ impl GiggleFlopUI {
 
             let title_bar = pane_grid::TitleBar::new(title)
                 .padding(10)
-                .style(style::title_bar_style);
+                .style(style::title_bar);
 
             pane_grid::Content::new(self.get_code_element())
                 .title_bar(title_bar)
-                .style(style::pane_style)
+                .style(style::pane)
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -334,6 +334,7 @@ impl GiggleFlopUI {
         row![column![register_pane, memory_pane], column![code_pane]].into()
     }
 
+    #[allow(clippy::unused_self)]
     fn theme(&self) -> Theme {
         Theme::Dark
     }
@@ -349,7 +350,7 @@ mod style {
     use iced::widget::container;
     use iced::{Border, Theme};
 
-    pub fn title_bar_style(theme: &Theme) -> container::Style {
+    pub fn title_bar(theme: &Theme) -> container::Style {
         let palette = theme.extended_palette();
 
         container::Style {
@@ -359,7 +360,7 @@ mod style {
         }
     }
 
-    pub fn pane_style(theme: &Theme) -> container::Style {
+    pub fn pane(theme: &Theme) -> container::Style {
         let palette = theme.extended_palette();
 
         container::Style {

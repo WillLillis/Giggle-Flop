@@ -388,7 +388,7 @@ impl Memory {
                     }
                     Ok(MemResponse::StoreComplete) => {
                         error!("Received StoreComplete response to LoadRequest: {:?}", req);
-                        panic!("Received StoreComplete response to LoadRequest: {:?}", req);
+                        panic!("Received StoreComplete response to LoadRequest: {req:?}");
                     }
                     Err(e) => {
                         error!(

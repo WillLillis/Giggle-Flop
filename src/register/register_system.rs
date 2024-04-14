@@ -34,12 +34,9 @@ pub enum FlagIndex {
 /// Returns the set of flag values resulting from a comparison of the two values
 pub fn get_comparison_flags(reg_1: Register, reg_2: Register) -> [Option<bool>; FLAG_COUNT] {
     let mut flags = [None; FLAG_COUNT];
-    flags[FlagIndex::EQ as usize] =
-        Some(reg_1 == reg_2);
-    flags[FlagIndex::LT as usize] = 
-        Some(reg_1 < reg_2);
-    flags[FlagIndex::LT as usize] = 
-        Some(reg_1 > reg_2);
+    flags[FlagIndex::EQ as usize] = Some(reg_1 == reg_2);
+    flags[FlagIndex::LT as usize] = Some(reg_1 < reg_2);
+    flags[FlagIndex::LT as usize] = Some(reg_1 > reg_2);
     // No overflow with comparisons...
     // No sign with comparisons...
     // No zero with comparisons...
@@ -98,9 +95,9 @@ impl RegisterSet {
         info!(
             "Incrementing program counter, old: {}, new: {}",
             self.program_counter,
-            self.program_counter + MEM_BLOCK_WIDTH as u32
+            self.program_counter + u32::try_from(MEM_BLOCK_WIDTH).unwrap()
         );
-        self.program_counter += MEM_BLOCK_WIDTH as u32;
+        self.program_counter += u32::try_from(MEM_BLOCK_WIDTH).unwrap();
     }
 
     /// Writes a value to a "normal" (non-PC) register
@@ -112,17 +109,14 @@ impl RegisterSet {
                     error!("Attempted to write to general register {num}, max index is {GEN_REG_COUNT}, treating write as NOOP");
                     return;
                 }
-                match data {
-                    MemBlock::Float32(inner) => {
-                        let bytes = inner.to_be_bytes();
-                        let conv = u32::from_be_bytes(bytes);
-                        warn!("Attempted to write float data {inner} to general register {num}, converted to u32 {conv}");
-                        self.general[num] = Register::new(MemBlock::Unsigned32(conv));
-                    }
-                    _ => {
-                        info!("Wrote {data} to general register {num}");
-                        self.general[num] = Register::new(data);
-                    }
+                if let MemBlock::Float32(inner) = data {
+                    let bytes = inner.to_be_bytes();
+                    let conv = u32::from_be_bytes(bytes);
+                    warn!("Attempted to write float data {inner} to general register {num}, converted to u32 {conv}");
+                    self.general[num] = Register::new(MemBlock::Unsigned32(conv));
+                } else {
+                    info!("Wrote {data} to general register {num}");
+                    self.general[num] = Register::new(data);
                 }
             }
             RegisterGroup::FloatingPoint => {
@@ -164,7 +158,7 @@ impl Display for RegisterSet {
         let mut accum = String::new();
         let padding = " ".repeat(4);
         for (i, (reg, freg)) in self.general.iter().zip(self.float.iter()).enumerate() {
-            accum += &format!("R{i:02}: {}{padding}F{i:02}: {}\n", reg, freg);
+            accum += &format!("R{i:02}: {reg}{padding}F{i:02}: {freg}\n");
         }
 
         for (i, flag_name) in FlagIndex::iter().enumerate() {
@@ -182,12 +176,12 @@ impl RegisterSet {
         match group {
             RegisterGroup::General => {
                 for (i, reg) in self.general.iter().enumerate() {
-                    accum += &format!("R{i:02}: {}\n", reg);
+                    accum += &format!("R{i:02}: {reg}\n");
                 }
             }
             RegisterGroup::FloatingPoint => {
                 for (i, reg) in self.float.iter().enumerate() {
-                    accum += &format!("F{i:02}: {}\n", reg);
+                    accum += &format!("F{i:02}: {reg}\n");
                 }
             }
             RegisterGroup::Flag => {

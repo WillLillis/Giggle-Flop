@@ -31,11 +31,11 @@ impl MemLine {
 
     /// Returns the contents stored at `address`
     pub fn get_contents(&self, address: usize) -> Option<MemBlock> {
-        if !self.contains_address(address) {
-            None
-        } else {
+        if self.contains_address(address) {
             let idx = (address - self.start_addr.unwrap()) / MEM_BLOCK_WIDTH;
             Some(self.data[idx])
+        } else {
+            None
         }
     }
 

@@ -10,7 +10,7 @@ const MASK_1: u32 = 0b1;
 const MASK_2: u32 = 0b11;
 const MASK_3: u32 = 0b111;
 const MASK_4: u32 = 0b1111;
-const MASK_21: u32 = 0b111111111111111111111;
+const MASK_21: u32 = 0b1_1111_1111_1111_1111_1111;
 
 pub type RawInstruction = u32;
 
@@ -72,7 +72,7 @@ impl Instruction {
                 };
                 Some(MemRequest::Load(LoadRequest {
                     issuer: issuer.unwrap_or_default(),
-                    address: *reg_2 as usize,
+                    address: *reg_2,
                     width: mem_type,
                 }))
             }
@@ -117,13 +117,13 @@ impl Instruction {
                 reg_1,
                 reg_2,
             } => match opcode {
-                0 | 1 | 2 => {
+                0..=2 => {
                     vec![
                         (RegisterGroup::General, *reg_1),
                         (RegisterGroup::General, *reg_2),
                     ]
                 }
-                3 | 4 | 5 => {
+                3..=5 => {
                     vec![(RegisterGroup::General, *reg_1)]
                 }
                 _ => Vec::new(),
@@ -143,7 +143,7 @@ impl Instruction {
                 reg_1,
                 immediate: _,
             } => match opcode {
-                6 | 7 | 8 => {
+                6..=8 => {
                     vec![(RegisterGroup::General, *reg_1)]
                 }
                 _ => Vec::new(),

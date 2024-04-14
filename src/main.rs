@@ -13,7 +13,7 @@ use anyhow::{anyhow, Result};
 
 fn main() -> Result<()> {
     flexi_logger::Logger::try_with_str("info")?.start()?;
-    ui::ui::enter_ui().map_err(|e| anyhow!(e))
+    ui::ui::enter().map_err(|e| anyhow!(e))
 }
 
 // #[allow(clippy::too_many_lines)] // junk code the demo...
