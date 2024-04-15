@@ -301,7 +301,7 @@ impl System {
         );
         // execute appears to pass along a more "filled in" instruction object, look into this...
         match self.execute {
-            PipelineStageStatus::Instruction(mut instr) => {
+            PipelineStageStatus::Instruction(ref mut instr) => {
                 info!("Pipeline::Execute: Have current instruction: {:?}", instr);
                 if let Some(ref mut instruction) = instr.decode_instr {
                     match instruction {
@@ -825,6 +825,7 @@ impl System {
             PipelineStageStatus::Stall => {
                 // if Noop/Stall, do nothing
                 info!("Pipeline::Memory: Stall is current state");
+                // TODO: temporary stopgap to allow pipeline to not get stuck, this should be true
                 self.memory = self.pipeline_execute(false);
                 PipelineStageStatus::Stall
             }
