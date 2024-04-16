@@ -1,6 +1,9 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-use std::{fmt::Display, ops::{BitAnd, BitOr, BitXor}};
+use std::{
+    fmt::Display,
+    ops::{BitAnd, BitOr, BitXor},
+};
 
 use log::info;
 
@@ -50,9 +53,7 @@ impl MemBlock {
                 let data = u32::from(*data);
                 MemBlock::Unsigned32(data.wrapping_add(immediate))
             }
-            MemBlock::Unsigned32(data) => {
-                MemBlock::Unsigned32(data.wrapping_add(immediate))
-            }
+            MemBlock::Unsigned32(data) => MemBlock::Unsigned32(data.wrapping_add(immediate)),
             MemBlock::Signed8(data) => {
                 let data = i32::from(*data);
                 MemBlock::Signed32(data.wrapping_add(immediate as i32))
@@ -61,42 +62,26 @@ impl MemBlock {
                 let data = i32::from(*data);
                 MemBlock::Signed32(data.wrapping_add(immediate as i32))
             }
-            MemBlock::Signed32(data) => {
-                MemBlock::Signed32(data.wrapping_add(immediate as i32))
-            }
-            MemBlock::Float32(data) => {
-                MemBlock::Float32(*data + immediate as f32)
-            }
+            MemBlock::Signed32(data) => MemBlock::Signed32(data.wrapping_add(immediate as i32)),
+            MemBlock::Float32(data) => MemBlock::Float32(*data + immediate as f32),
         }
     }
 
     fn get_unsigned(self) -> Option<u32> {
         match self {
-            Self::Unsigned8(data) => {
-                Some(u32::from(data))
-            }
-            Self::Unsigned16(data) => {
-                Some(u32::from(data))
-            }
-            Self::Unsigned32(data) => {
-                Some(data)
-            }
-            _ => None
+            Self::Unsigned8(data) => Some(u32::from(data)),
+            Self::Unsigned16(data) => Some(u32::from(data)),
+            Self::Unsigned32(data) => Some(data),
+            _ => None,
         }
     }
 
     fn get_signed(self) -> Option<i32> {
         match self {
-            Self::Signed8(data) => {
-                Some(i32::from(data))
-            }
-            Self::Signed16(data) => {
-                Some(i32::from(data))
-            }
-            Self::Signed32(data) => {
-                Some(data)
-            }
-            _ => None
+            Self::Signed8(data) => Some(i32::from(data)),
+            Self::Signed16(data) => Some(i32::from(data)),
+            Self::Signed32(data) => Some(data),
+            _ => None,
         }
     }
 
@@ -110,79 +95,37 @@ impl MemBlock {
 
     fn force_unsigned(self) -> u32 {
         match self {
-            MemBlock::Unsigned8(data) => {
-                u32::from(data)
-            }
-            MemBlock::Unsigned16(data) => {
-                u32::from(data)
-            },
-            MemBlock::Unsigned32(data) => {
-                data
-            },
-            MemBlock::Signed8(data) => {
-                data as u32
-            },
-            MemBlock::Signed16(data) => {
-                data as u32
-            },
-            MemBlock::Signed32(data) => {
-                data as u32
-            },
-            MemBlock::Float32(data) => {
-                data as u32
-            },
+            MemBlock::Unsigned8(data) => u32::from(data),
+            MemBlock::Unsigned16(data) => u32::from(data),
+            MemBlock::Unsigned32(data) => data,
+            MemBlock::Signed8(data) => data as u32,
+            MemBlock::Signed16(data) => data as u32,
+            MemBlock::Signed32(data) => data as u32,
+            MemBlock::Float32(data) => data as u32,
         }
     }
 
     fn force_signed(self) -> i32 {
         match self {
-            MemBlock::Unsigned8(data) => {
-                i32::from(data)
-            }
-            MemBlock::Unsigned16(data) => {
-                i32::from(data)
-            },
-            MemBlock::Unsigned32(data) => {
-                data as i32
-            },
-            MemBlock::Signed8(data) => {
-                i32::from(data)
-            },
-            MemBlock::Signed16(data) => {
-                i32::from(data)
-            },
-            MemBlock::Signed32(data) => {
-                data
-            },
-            MemBlock::Float32(data) => {
-                data as i32
-            },
+            MemBlock::Unsigned8(data) => i32::from(data),
+            MemBlock::Unsigned16(data) => i32::from(data),
+            MemBlock::Unsigned32(data) => data as i32,
+            MemBlock::Signed8(data) => i32::from(data),
+            MemBlock::Signed16(data) => i32::from(data),
+            MemBlock::Signed32(data) => data,
+            MemBlock::Float32(data) => data as i32,
         }
     }
 
     fn force_float(self) -> f32 {
         match self {
-            MemBlock::Unsigned8(data) => {
-                f32::from(data)
-            }
-            MemBlock::Unsigned16(data) => {
-                f32::from(data)
-            },
-            MemBlock::Unsigned32(data) => {
-                data as f32
-            },
-            MemBlock::Signed8(data) => {
-                f32::from(data)
-            },
-            MemBlock::Signed16(data) => {
-                f32::from(data)
-            },
-            MemBlock::Signed32(data) => {
-                data as f32
-            },
-            MemBlock::Float32(data) => {
-                data
-            },
+            MemBlock::Unsigned8(data) => f32::from(data),
+            MemBlock::Unsigned16(data) => f32::from(data),
+            MemBlock::Unsigned32(data) => data as f32,
+            MemBlock::Signed8(data) => f32::from(data),
+            MemBlock::Signed16(data) => f32::from(data),
+            MemBlock::Signed32(data) => data as f32,
+            MemBlock::Float32(data) => data,
         }
     }
 

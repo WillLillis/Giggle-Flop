@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 
-use iced::futures::future::pending;
 use log::{error, info};
 
 use crate::instruction::instruction::{decode_raw_instr, Instruction, RawInstruction};
 use crate::memory::memory_system::{
-    LoadRequest, LoadResponse, MemRequest, MemResponse, MemType, Memory,
+    LoadRequest, LoadResponse, MemRequest, MemResponse, MemType, Memory, MEM_BLOCK_WIDTH,
 };
 use crate::register::register_system::{
     get_comparison_flags, RegisterGroup, RegisterSet, FLAG_COUNT, RET_REG,
@@ -89,6 +88,33 @@ impl System {
             execute: PipelineStageStatus::Noop,
             memory: PipelineStageStatus::Noop,
             writeback: PipelineStageStatus::Noop,
+        }
+    }
+
+    // TODO: Improve this idk
+    pub fn load_program(&mut self) {
+        let program_file = "a";
+        info!("Loading program file {program_file}");
+        let program = std::fs::read(program_file).unwrap();
+        info!("Loaded: {:?}", program);
+
+        // check the length
+        let program_len = program.len() * 8;
+        let mem_len = self.memory_system.main_capacity().unwrap();
+        if program_len > mem_len {
+            error!("Program {program_file} is too large to fit in main memory: {program_len} > {mem_len}");
+            panic!("Program too large");
+        }
+
+        // TODO: Perform some sanitation here...
+        for (i, instr) in program.windows(4).enumerate() {
+            if instr.len() != 4 {
+                error!("Program length isn't an integer multiple of 32 bits");
+                panic!("Invalid program length");
+            }
+            let bytes = [instr[0], instr[1], instr[2], instr[3]];
+            let data = MemBlock::Unsigned32(u32::from_be_bytes(bytes));
+            self.memory_system.force_store(i * MEM_BLOCK_WIDTH, data);
         }
     }
 

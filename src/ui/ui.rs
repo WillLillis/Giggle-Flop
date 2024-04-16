@@ -34,6 +34,7 @@ enum Message {
     SelectMemoryLevel(usize),
     SelectRegisterGroup(RegisterGroup),
     AdvanceClock,
+    LoadProgram,
     // maybe delete
     Clicked(pane_grid::Pane),
     Dragged(pane_grid::DragEvent),
@@ -96,6 +97,12 @@ impl GiggleFlopUI {
                 self.system.step();
                 Command::none()
             }
+            Message::LoadProgram => {
+                // TODO: Fill in later...
+                self.system.load_program();
+                Command::none()
+
+            }
             Message::Clicked(pane) => {
                 self.focus = Some(pane);
                 Command::none()
@@ -119,11 +126,16 @@ impl GiggleFlopUI {
                     .padding(10)
                     .on_press(Message::AdvanceClock)
             };
+            let load_button = || {
+                button("Click to load test program")
+                    .padding(10)
+                    .on_press(Message::LoadProgram)
+            };
             let code_text = format!("TODO: Code goes here...Clock: {}", self.system.clock);
             Scrollable::with_direction(
                 row![
                     //column![text("TODO: Code goes here..."), step_button()]
-                    column![text(code_text), step_button()]
+                    column![text(code_text), step_button(), load_button()]
                         .align_items(Alignment::Center)
                         .padding([0, 0, 0, 0])
                         .spacing(40),

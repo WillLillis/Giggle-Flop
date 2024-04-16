@@ -59,7 +59,10 @@ impl MemoryLevel {
     pub fn force_store(&mut self, address: usize, data: MemBlock) {
         let idx = self.address_index(address);
         if let Err(e) = self.contents[idx].write(address, data) {
-            error!("force_store: write to {address} with {:?} failed -- Error {e}", data);
+            error!(
+                "force_store: write to {address} with {:?} failed -- Error {e}",
+                data
+            );
         }
     }
 

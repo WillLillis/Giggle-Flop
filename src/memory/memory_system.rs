@@ -2,10 +2,10 @@
 #![allow(clippy::module_name_repetitions)]
 use std::borrow::Cow;
 
-use crate::system::system::{Cycle, PipelineStage};
 pub use crate::memory::memory_block::MemBlock;
 use crate::memory::memory_level::MemoryLevel;
 use crate::memory::memory_line::MemLine;
+use crate::system::system::{Cycle, PipelineStage};
 
 use anyhow::{anyhow, Result};
 use log::{error, info, warn};
@@ -52,12 +52,8 @@ impl MemRequest {
     /// Returns the address associated with a given request
     pub fn get_address(&self) -> usize {
         match self {
-            MemRequest::Load(req) => {
-                req.address
-            }
-            MemRequest::Store(req) => {
-                req.address
-            }
+            MemRequest::Load(req) => req.address,
+            MemRequest::Store(req) => req.address,
         }
     }
 }

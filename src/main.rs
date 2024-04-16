@@ -1,11 +1,11 @@
 #![warn(clippy::all, clippy::pedantic)]
 
 // TODO: Do these need to be here?
-mod memory;
-mod ui;
-mod system;
-mod register;
 mod instruction;
+mod memory;
+mod register;
+mod system;
+mod ui;
 
 use anyhow::{anyhow, Result};
 // TODO: Probably delete dialoguer dependency...
