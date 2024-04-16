@@ -107,7 +107,7 @@ impl System {
         }
 
         // TODO: Perform some sanitation here...
-        for (i, instr) in program.windows(4).enumerate() {
+        for (i, instr) in program.windows(4).step_by(4).enumerate() {
             if instr.len() != 4 {
                 error!("Program length isn't an integer multiple of 32 bits");
                 panic!("Invalid program length");
