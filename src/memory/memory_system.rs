@@ -157,7 +157,7 @@ impl Memory {
         if level >= self.levels.len() {
             Err(anyhow!("Checked capacity of invalid memory level: {level}"))
         } else {
-            Ok(self.levels.len() * self.line_len * MEM_BLOCK_WIDTH)
+            Ok(self.levels[level].num_lines() * self.line_len * MEM_BLOCK_WIDTH)
         }
     }
 
@@ -322,8 +322,7 @@ impl Memory {
         let address = data.start_address().expect("Empty address field");
         for level in 0..=start_level {
             info!("Populating cache level {level} with {:?}", data);
-            let address = address % self.num_lines(level).unwrap(); // wrap addresses to avoid
-                                                                    // overflow
+            let address = address % self.get_capacity(level).unwrap();
             self.levels[level].write_line(address, data)?;
         }
 

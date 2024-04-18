@@ -66,16 +66,16 @@ impl System {
     // For debugging purposes, will need to make this
     // configurable later...
     pub fn default() -> Self {
-        let mut memory_system = Memory::new(4, &[32, 64], &[1, 2]);
+        let mut memory_system = Memory::new(4, &[32, 256], &[1, 2]);
         // Load up a sample program
         // we will simply add two numbers inside two registers
-        memory_system.force_store(128, MemBlock::Unsigned32(1));
-        let add_imm_instr = 0b0_0000_0000_0000_0000_0001_0000_1001_100;
+        // memory_system.force_store(128, MemBlock::Unsigned32(1));
+        // let add_imm_instr = 0b0_0000_0000_0000_0000_0001_0000_1001_100;
         // let load_instr = 0b0000_0000_0000_0100_0000_0000_1001_0100;
         // let add_instr = 0b0000_0000_0000_0001_1001_0000_1000_1101;
         // let tmp_add_instr = decode_raw_instr(add_imm_instr);
         // let tmp_load_instr = decode_raw_instr(load_instr);
-        memory_system.force_store(0, MemBlock::Unsigned32(add_imm_instr));
+        // memory_system.force_store(0, MemBlock::Unsigned32(add_imm_instr));
 
         Self {
             clock: 0,
@@ -287,8 +287,8 @@ impl System {
                 // BUG: Later stages incorrectly get stuck in blocked state, we ignore every
                 // instruction coming out of fetch...
                 self.pipeline_fetch(true); // shouldn't get anything back because we're blocked...
-                //info!("Pipeline::Decode: Passing on a Stall status");
-                //PipelineStageStatus::Stall
+                                           //info!("Pipeline::Decode: Passing on a Stall status");
+                                           //PipelineStageStatus::Stall
                 info!("Pipeline::Decode: Passing on a Noop status");
                 PipelineStageStatus::Noop
             }
@@ -302,9 +302,14 @@ impl System {
             }
             // instruction has operands, execute not blocked
             (false, false) => {
-                let completed_instr = self.decode;
+                let completed_instr = if PipelineStageStatus::Stall == self.decode {
+                    info!("Pipeline::Decode: Translating Stall to Noop");
+                    PipelineStageStatus::Noop
+                } else {
+                    self.decode
+                };
                 info!("Pipeline::Decode: Calling fetch with unblocked status");
-                self.decode = self.pipeline_fetch(exec_blocked);
+                self.decode = self.pipeline_fetch(false);
                 info!(
                     "Pipeline::Decode: Instruction saved for next decode: {:?}",
                     self.decode
@@ -727,21 +732,27 @@ impl System {
         //
         // } else {
         // if memory not blocked, return instruction object with result to memory
-        let completed_instr = self.execute; // TODO: Fill in result for this...
-        info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}, saving result to execute's state");
-        self.execute = self.pipeline_decode(mem_blocked);
         if mem_blocked {
-            info!("Pipeline::Execute: Returning Stall"); // try returning a NOOP if memory is
-                                                         // stalled instead?
-            PipelineStageStatus::Stall
+            //info!("Pipeline::Execute: Returning Stall"); // try returning a NOOP if memory is
+            // stalled instead?
+            info!("Pipeline::Execute: Returning Noop");
+            //PipelineStageStatus::Stall
+            PipelineStageStatus::Noop
         } else {
-            info!(
-                "Pipeline::Execute: Returning instruction {:?}",
-                completed_instr
-            );
-            completed_instr // check if translation from stall is needed here
+            let completed_instr = self.execute; // TODO: Fill in result for this...
+            info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}, saving result to execute's state");
+            self.execute = self.pipeline_decode(mem_blocked);
+            if completed_instr == PipelineStageStatus::Stall {
+                info!("Pipeline::Execute: Returning Noop");
+                PipelineStageStatus::Noop
+            } else {
+                info!(
+                    "Pipeline::Execute: Returning instruction {:?}",
+                    completed_instr
+                );
+                completed_instr // check if translation from stall is needed here
+            }
         }
-        // }
     }
 
     #[allow(clippy::too_many_lines)] // TODO: Fix this later...
@@ -775,7 +786,7 @@ impl System {
                                 // if not blocked, return instruction with result
                                 // if blocked, return Noop/ Stall
                                 info!("Pipeline::Memory: Calling execute with memory blocked");
-                                // BUG: Make sure this doesn't return anything?
+                                // BUG: Make sure this doesn't return anything? (besides a noop)
                                 self.pipeline_execute(true);
                                 info!("Pipeline::Memory: Returning stall status to writeback");
                                 PipelineStageStatus::Stall
@@ -864,7 +875,7 @@ impl System {
                 // if Noop/Stall, do nothing
                 info!("Pipeline::Memory: Stall is current state");
                 // TODO: temporary stopgap to allow pipeline to not get stuck, this should be true
-                self.memory = self.pipeline_execute(false);
+                self.pipeline_execute(true);
                 PipelineStageStatus::Stall
             }
             PipelineStageStatus::Noop => {
