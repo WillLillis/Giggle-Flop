@@ -239,7 +239,10 @@ impl System {
         );
         let mut pending_regs = false;
         match self.decode {
-            PipelineStageStatus::Instruction(ref mut instruction) => {
+            // make sure we're not just repeating a decode here if exec is blocked
+            PipelineStageStatus::Instruction(ref mut instruction)
+                if instruction.decode_instr.is_none() =>
+            {
                 if let Some(raw) = instruction.raw_instr {
                     // split instruction into fields
                     if let Some(instr) = decode_raw_instr(raw) {
@@ -260,6 +263,12 @@ impl System {
                     self.decode = PipelineStageStatus::Noop;
                 }
             }
+            PipelineStageStatus::Instruction(ref instr) => {
+                info!(
+                    "Pipeline::Decode: Current instruction already decoded: {:?}",
+                    instr
+                );
+            }
             PipelineStageStatus::Stall => {
                 // if Noop/Stall, do nothing
                 info!("Pipeline::Decode: Stall is current state");
@@ -278,8 +287,10 @@ impl System {
                 // BUG: Later stages incorrectly get stuck in blocked state, we ignore every
                 // instruction coming out of fetch...
                 self.pipeline_fetch(true); // shouldn't get anything back because we're blocked...
-                info!("Pipeline::Decode: Passing on a Stall status");
-                PipelineStageStatus::Stall
+                //info!("Pipeline::Decode: Passing on a Stall status");
+                //PipelineStageStatus::Stall
+                info!("Pipeline::Decode: Passing on a Noop status");
+                PipelineStageStatus::Noop
             }
             (true, _) => {
                 info!("Pipeline::Decode: Calling fetch with blocked status");
@@ -298,7 +309,6 @@ impl System {
                     "Pipeline::Decode: Instruction saved for next decode: {:?}",
                     self.decode
                 );
-                // pattern matching?
                 if let PipelineStageStatus::Instruction(instr) = completed_instr {
                     if let Some(reg) = instr.get_dest_reg() {
                         info!(
@@ -309,6 +319,7 @@ impl System {
                     }
                 }
                 // BUG: Issue is here???
+                // try out swapping stalls with a noop (Chip said stalls don't propogate?)
                 info!(
                     "Pipeline::Decode: Returning decoded instruction {:?} to execute",
                     completed_instr
@@ -720,14 +731,15 @@ impl System {
         info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}, saving result to execute's state");
         self.execute = self.pipeline_decode(mem_blocked);
         if mem_blocked {
-            info!("Pipeline::Execute: Returning Stall");
+            info!("Pipeline::Execute: Returning Stall"); // try returning a NOOP if memory is
+                                                         // stalled instead?
             PipelineStageStatus::Stall
         } else {
             info!(
                 "Pipeline::Execute: Returning instruction {:?}",
                 completed_instr
             );
-            completed_instr
+            completed_instr // check if translation from stall is needed here
         }
         // }
     }
@@ -965,6 +977,7 @@ impl System {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum PipelineStageStatus {
     Instruction(PipelineInstruction),
+    //Block, // NOTE: Starting to fix things...
     Stall,
     Noop,
 }
