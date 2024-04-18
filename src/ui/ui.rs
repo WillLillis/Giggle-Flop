@@ -5,7 +5,7 @@ use iced::widget::{
     button, checkbox, horizontal_space, pane_grid, Button, Column, Container, PaneGrid, Text,
 };
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
-use iced::{Alignment, Border, Color, Command, Element, Length, Theme};
+use iced::{Alignment, Border, Color, Command, Element, Length, Shadow, Theme};
 use log::info;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -374,6 +374,7 @@ impl GiggleFlopUI {
             };
             let button = Button::new(text)
                 .on_press(Message::LineClicked(instr.number))
+                .style(style::btn)
                 // TODO: add style here to remove background?
                 .padding(0);
             column = column.push(button);
@@ -523,7 +524,10 @@ impl Default for GiggleFlopUI {
 }
 
 mod style {
-    use iced::widget::{button, container};
+    use iced::{border::Radius, widget::{
+        button::{self, Status, Style},
+        container,
+    }};
     use iced::{Background, Border, Color, Shadow, Theme, Vector};
 
     pub fn title_bar(theme: &Theme) -> container::Style {
@@ -550,9 +554,16 @@ mod style {
         }
     }
 
-    pub fn btn() -> button::Style {
+    pub fn btn(theme: &Theme, status: Status) -> button::Style {
         button::Style {
-            ..Default::default()
+            background: None,
+            text_color: Color::WHITE,
+            border: Border {
+                color: Color::WHITE,
+                width: 0.0,
+                radius: Radius::from(0.0),
+            },
+            shadow: Shadow::default(),
         }
     }
 }
