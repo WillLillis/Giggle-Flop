@@ -1,5 +1,6 @@
+use iced::widget::pane_grid::Content;
 use iced::widget::scrollable::Properties;
-use iced::widget::{button, pane_grid, PaneGrid};
+use iced::widget::{button, checkbox, horizontal_space, pane_grid, PaneGrid};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
 use iced::{Alignment, Command, Element, Length, Theme};
 
@@ -26,6 +27,8 @@ struct GiggleFlopUI {
     current_scroll_offset: scrollable::RelativeOffset,
     panes: pane_grid::State<Pane>,
     focus: Option<pane_grid::Pane>,
+    use_cache: bool,
+    use_pipeline: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -34,6 +37,10 @@ enum Message {
     SelectMemoryLevel(usize),
     SelectRegisterGroup(RegisterGroup),
     AdvanceClock,
+    AdvanceInstruction,
+    SetBreakpoint,
+    UsePipeline(bool),
+    UseCache(bool),
     LoadProgram,
     // maybe delete
     Clicked(pane_grid::Pane),
@@ -73,6 +80,8 @@ impl GiggleFlopUI {
             panes,
             focus: None,
             system,
+            use_cache: true,
+            use_pipeline: true,
         }
     }
 
@@ -97,11 +106,29 @@ impl GiggleFlopUI {
                 self.system.step();
                 Command::none()
             }
+            Message::AdvanceInstruction => {
+                // TODO: this
+                // self.system.
+                Command::none()
+            }
+            Message::SetBreakpoint => {
+                // TODO: this
+                Command::none()
+            }
+            Message::UseCache(default) => {
+                // TODO: this
+                self.use_cache = default;
+                Command::none()
+            }
+            Message::UsePipeline(default) => {
+                // TODO: this
+                self.use_pipeline = default;
+                Command::none()
+            }
             Message::LoadProgram => {
                 // TODO: Fill in later...
                 self.system.load_program();
                 Command::none()
-
             }
             Message::Clicked(pane) => {
                 self.focus = Some(pane);
@@ -119,28 +146,50 @@ impl GiggleFlopUI {
         }
     }
 
-    fn get_code_element(&self) -> Element<Message> {
-        let scrollable_content: Element<Message> = Element::from({
+    fn get_config_element(&self) -> Element<Message> {
+        let config_content: Element<Message> = Element::from({
             let step_button = || {
-                button("Click to advance")
+                button("Step clock")
                     .padding(10)
                     .on_press(Message::AdvanceClock)
             };
             let load_button = || {
-                button("Click to load test program")
+                button("Load test program")
                     .padding(10)
                     .on_press(Message::LoadProgram)
             };
-            let code_text = format!("TODO: Code goes here...Clock: {}", self.system.clock);
+            let break_button = || {
+                button("Set breakpoint")
+                    .padding(10)
+                    .on_press(Message::SetBreakpoint)
+            };
+            let skip_instruction_button = || {
+                button("Skip instruction")
+                    .padding(10)
+                    .on_press(Message::AdvanceInstruction)
+            };
+            let cache_checkbox =
+                || checkbox("Use Cache", self.use_cache).on_toggle(Message::UseCache);
+            let pipeline_checkbox =
+                || checkbox("Use Pipeline", self.use_pipeline).on_toggle(Message::UsePipeline);
+            let clock_text = format!("Clock: {}", self.system.clock);
             Scrollable::with_direction(
+                //column![
+                //column![text("TODO: Code goes here..."), step_button()]
                 row![
-                    //column![text("TODO: Code goes here..."), step_button()]
-                    column![text(code_text), step_button(), load_button()]
-                        .align_items(Alignment::Center)
-                        .padding([0, 0, 0, 0])
-                        .spacing(40),
-                    text(" ".repeat(8))
-                ], // padding so scrollbar doesn't cover text
+                    text(clock_text),
+                    step_button(),
+                    load_button(),
+                    break_button(),
+                    skip_instruction_button(),
+                    cache_checkbox(),
+                    pipeline_checkbox(),
+                ]
+                .align_items(Alignment::Center)
+                .padding([0, 0, 0, 0])
+                .spacing(20),
+                //text(" ".repeat(8))
+                //], // padding so scrollbar doesn't cover text
                 {
                     let properties = Properties::new()
                         .width(10)
@@ -160,8 +209,9 @@ impl GiggleFlopUI {
             .on_scroll(Message::Scrolled)
         });
 
-        let content: Element<Message> = column![scrollable_content]
-            .align_items(Alignment::Start)
+        let content: Element<Message> = column![config_content]
+            //let content: Element<Message> = config_content
+            .align_items(Alignment::Center)
             .spacing(10)
             .into();
 
@@ -259,10 +309,47 @@ impl GiggleFlopUI {
             Some(self.current_memory_level),
             Message::SelectMemoryLevel,
         )
-        .placeholder("Select memory level...");
+        .placeholder("Memory level");
 
         // TODO: Use pretty printing crate?
         let content: Element<Message> = column![mem_level_select, scrollable_content]
+            .align_items(Alignment::Start)
+            .spacing(10)
+            .into();
+
+        container(content).padding(20).center_x().center_y().into()
+    }
+
+    fn get_instruction_element(&self) -> Element<Message> {
+        // TODO: change this to instructions
+        let scrollable_content: Element<Message> = Element::from({
+            Scrollable::with_direction(
+                row![
+                    column![text("LD32 R5, TEST_LABEL")] // padding
+                        .align_items(Alignment::Center)
+                        .padding([0, 0, 0, 0])
+                        .spacing(40),
+                    text(" ".repeat(8))
+                ], // padding so scrollbar doesn't cover text
+                {
+                    let properties = Properties::new()
+                        .width(10)
+                        .margin(0)
+                        .scroller_width(10)
+                        .alignment(scrollable::Alignment::Start);
+
+                    scrollable::Direction::Both {
+                        horizontal: properties,
+                        vertical: properties,
+                    }
+                },
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .id(SCROLLABLE_ID.clone())
+            .on_scroll(Message::Scrolled)
+        });
+        let content: Element<Message> = column![scrollable_content]
             .align_items(Alignment::Start)
             .spacing(10)
             .into();
@@ -290,7 +377,7 @@ impl GiggleFlopUI {
         .on_resize(10, Message::Resized);
 
         let memory_pane: Element<Message> = container(memory_block)
-            .width(Length::Fill)
+            .width(Length::FillPortion(4))
             .height(Length::Fill)
             .padding(10)
             .into();
@@ -314,19 +401,19 @@ impl GiggleFlopUI {
         .on_resize(10, Message::Resized);
 
         let register_pane: Element<Message> = container(register_block)
-            .width(Length::Fill)
+            .width(Length::FillPortion(2))
             .height(Length::Fill)
             .padding(10)
             .into();
 
-        let code_block = PaneGrid::new(&self.panes, |_id, _pane, _is_maximized| {
-            let title = row!["Source Code"].spacing(5);
+        let instruction_block = PaneGrid::new(&self.panes, |_id, _pane, _is_maximized| {
+            let title = row!["Instructions"].spacing(5);
 
             let title_bar = pane_grid::TitleBar::new(title)
                 .padding(10)
                 .style(style::title_bar);
 
-            pane_grid::Content::new(self.get_code_element())
+            pane_grid::Content::new(self.get_instruction_element())
                 .title_bar(title_bar)
                 .style(style::pane)
         })
@@ -337,13 +424,42 @@ impl GiggleFlopUI {
         .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
-        let code_pane: Element<Message> = container(code_block)
+        let instruction_pane: Element<Message> = container(instruction_block)
+            .width(Length::FillPortion(3))
+            .height(Length::FillPortion(4))
+            .padding(10)
+            .into();
+
+        let config_block = PaneGrid::new(&self.panes, |_id, _pane, _is_maximized| {
+            let title = row!["Config"].spacing(5);
+
+            let title_bar = pane_grid::TitleBar::new(title)
+                .padding(10)
+                .style(style::title_bar);
+
+            pane_grid::Content::new(self.get_config_element())
+                .title_bar(title_bar)
+                .style(style::pane)
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .spacing(10)
+        .on_click(Message::Clicked)
+        .on_drag(Message::Dragged)
+        .on_resize(10, Message::Resized);
+
+        let config_pane: Element<Message> = container(config_block)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(10)
             .into();
 
-        row![column![register_pane, memory_pane], column![code_pane]].into()
+        column![
+            config_pane,
+            row![instruction_pane, register_pane, memory_pane]
+        ]
+        .height(Length::Fill)
+        .into()
     }
 
     #[allow(clippy::unused_self)]
