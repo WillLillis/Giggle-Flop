@@ -1,8 +1,14 @@
+use iced::widget::button::{Status, Style, StyleFn};
 use iced::widget::pane_grid::Content;
 use iced::widget::scrollable::Properties;
-use iced::widget::{button, checkbox, horizontal_space, pane_grid, PaneGrid};
+use iced::widget::{
+    button, checkbox, horizontal_space, pane_grid, Button, Column, Container, PaneGrid, Text,
+};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
-use iced::{Alignment, Command, Element, Length, Theme};
+use iced::{Alignment, Border, Color, Command, Element, Length, Theme};
+use log::info;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;
@@ -27,8 +33,9 @@ struct GiggleFlopUI {
     current_scroll_offset: scrollable::RelativeOffset,
     panes: pane_grid::State<Pane>,
     focus: Option<pane_grid::Pane>,
-    use_cache: bool,
     use_pipeline: bool,
+    instr_lines: Vec<Line>,
+    program_counter: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,12 +47,19 @@ enum Message {
     AdvanceInstruction,
     SetBreakpoint,
     UsePipeline(bool),
-    UseCache(bool),
     LoadProgram,
+    LineClicked(usize),
     // maybe delete
     Clicked(pane_grid::Pane),
-    Dragged(pane_grid::DragEvent),
     Resized(pane_grid::ResizeEvent),
+}
+
+#[derive(Clone)]
+struct Line {
+    number: usize,
+    instr: String,
+    is_red: bool,
+    is_green: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -70,7 +84,19 @@ impl GiggleFlopUI {
             }
             groups
         };
+        let program_counter = system.registers.program_counter;
         let (panes, _) = pane_grid::State::new(Pane::new());
+
+        let instructions = Self::get_instructions_from_file().unwrap();
+        let mut instr_obj = Vec::new();
+        for (line, instr) in instructions.into_iter().enumerate() {
+            instr_obj.push(Line {
+                number: line + 1,
+                instr,
+                is_red: false,
+                is_green: false,
+            })
+        }
         GiggleFlopUI {
             memory_levels,
             current_memory_level: system.memory_system.num_levels() - 1,
@@ -80,8 +106,9 @@ impl GiggleFlopUI {
             panes,
             focus: None,
             system,
-            use_cache: true,
             use_pipeline: true,
+            instr_lines: instr_obj,
+            program_counter,
         }
     }
 
@@ -103,6 +130,11 @@ impl GiggleFlopUI {
                 Command::none()
             }
             Message::AdvanceClock => {
+                self.program_counter = self.system.registers.program_counter;
+                println!("program counter: {}", self.program_counter);
+                for line in &mut self.instr_lines {
+                    line.is_green = line.number == (self.program_counter / 32 + 1) as usize;
+                }
                 self.system.step();
                 Command::none()
             }
@@ -115,11 +147,6 @@ impl GiggleFlopUI {
                 // TODO: this
                 Command::none()
             }
-            Message::UseCache(default) => {
-                // TODO: this
-                self.use_cache = default;
-                Command::none()
-            }
             Message::UsePipeline(default) => {
                 // TODO: this
                 self.use_pipeline = default;
@@ -130,6 +157,12 @@ impl GiggleFlopUI {
                 self.system.load_program();
                 Command::none()
             }
+            Message::LineClicked(line_num) => {
+                if let Some(instr) = self.instr_lines.get_mut(line_num - 1) {
+                    instr.is_red = !instr.is_red;
+                }
+                Command::none()
+            }
             Message::Clicked(pane) => {
                 self.focus = Some(pane);
                 Command::none()
@@ -138,12 +171,20 @@ impl GiggleFlopUI {
                 self.panes.resize(split, ratio);
                 Command::none()
             }
-            Message::Dragged(pane_grid::DragEvent::Dropped { pane, target }) => {
-                self.panes.drop(pane, target);
-                Command::none()
-            }
-            Message::Dragged(_) => Command::none(),
         }
+    }
+
+    fn get_instructions_from_file() -> Result<Vec<String>, std::io::Error> {
+        let program_file = "test.gf";
+        info!("Loading instruction file {program_file}");
+        let f = File::open(program_file).expect("Unable to open instruction file");
+        let f = BufReader::new(f);
+        let mut lines = Vec::new();
+
+        for line in f.lines() {
+            lines.push(line?);
+        }
+        Ok(lines)
     }
 
     fn get_config_element(&self) -> Element<Message> {
@@ -168,8 +209,6 @@ impl GiggleFlopUI {
                     .padding(10)
                     .on_press(Message::AdvanceInstruction)
             };
-            let cache_checkbox =
-                || checkbox("Use Cache", self.use_cache).on_toggle(Message::UseCache);
             let pipeline_checkbox =
                 || checkbox("Use Pipeline", self.use_pipeline).on_toggle(Message::UsePipeline);
             let clock_text = format!("Clock: {}", self.system.clock);
@@ -182,7 +221,6 @@ impl GiggleFlopUI {
                     load_button(),
                     break_button(),
                     skip_instruction_button(),
-                    cache_checkbox(),
                     pipeline_checkbox(),
                 ]
                 .align_items(Alignment::Center)
@@ -321,16 +359,30 @@ impl GiggleFlopUI {
     }
 
     fn get_instruction_element(&self) -> Element<Message> {
-        // TODO: change this to instructions
+        let mut column = Column::new();
+        for instr in &self.instr_lines {
+            let text = Text::new(format!("{}: {}", instr.number, instr.instr));
+            let text = if instr.is_green {
+                text.color(Color::from_rgb(0.0, 1.0, 0.0))
+            } else {
+                text
+            };
+            let text = if instr.is_red {
+                text.color(Color::from_rgb(1.0, 0.0, 0.0))
+            } else {
+                text
+            };
+            let button = Button::new(text)
+                .on_press(Message::LineClicked(instr.number))
+                // TODO: add style here to remove background?
+                .padding(0);
+            column = column.push(button);
+        }
         let scrollable_content: Element<Message> = Element::from({
             Scrollable::with_direction(
-                row![
-                    column![text("LD32 R5, TEST_LABEL")] // padding
-                        .align_items(Alignment::Center)
-                        .padding([0, 0, 0, 0])
-                        .spacing(40),
-                    text(" ".repeat(8))
-                ], // padding so scrollbar doesn't cover text
+                row![column // padding
+                    .align_items(Alignment::Start)
+                    .padding([0, 0, 0, 0])], // padding so scrollbar doesn't cover text
                 {
                     let properties = Properties::new()
                         .width(10)
@@ -373,7 +425,6 @@ impl GiggleFlopUI {
         .height(Length::Fill)
         .spacing(10)
         .on_click(Message::Clicked)
-        .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
         let memory_pane: Element<Message> = container(memory_block)
@@ -397,7 +448,6 @@ impl GiggleFlopUI {
         .height(Length::Fill)
         .spacing(10)
         .on_click(Message::Clicked)
-        .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
         let register_pane: Element<Message> = container(register_block)
@@ -421,7 +471,6 @@ impl GiggleFlopUI {
         .height(Length::Fill)
         .spacing(10)
         .on_click(Message::Clicked)
-        .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
         let instruction_pane: Element<Message> = container(instruction_block)
@@ -445,7 +494,6 @@ impl GiggleFlopUI {
         .height(Length::Fill)
         .spacing(10)
         .on_click(Message::Clicked)
-        .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
         let config_pane: Element<Message> = container(config_block)
@@ -475,8 +523,8 @@ impl Default for GiggleFlopUI {
 }
 
 mod style {
-    use iced::widget::container;
-    use iced::{Border, Theme};
+    use iced::widget::{button, container};
+    use iced::{Background, Border, Color, Shadow, Theme, Vector};
 
     pub fn title_bar(theme: &Theme) -> container::Style {
         let palette = theme.extended_palette();
@@ -501,4 +549,24 @@ mod style {
             ..Default::default()
         }
     }
+
+    pub fn btn() -> button::Style {
+        button::Style {
+            ..Default::default()
+        }
+    }
 }
+
+// struct ButtonColor {
+//     color: iced::Color,
+// }
+
+// impl button::StyleSheet for ButtonColor {
+//     fn active(&self) -> button::Style {
+//         button::Style {
+//             background: Some(iced::Background::Color(self.color)),
+//             ..Default::default()
+//         }
+//     }
+//     // other methods in Stylesheet have a default impl
+// }

@@ -982,6 +982,10 @@ impl System {
         info!("Incrementing the clock");
         self.clock += 1;
     }
+
+    pub fn skip_instruction(&mut self) {
+        info!("Starting an instruction step");
+    }
 }
 
 /// A common object to be passed between pipeline stages
