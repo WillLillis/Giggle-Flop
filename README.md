@@ -13,8 +13,8 @@ A toy ISA designed and simulated from scratch.
 
 ## TODO
 
-- 5 stage CPU pipeline
-- Branch predictor
-- GUI debugger
-- Serialization/Deserialization of program/machine state
+- 5 stage CPU pipeline -- Close to done!
+- Branch predictor -- TBD
+- GUI debugger -- In progress!
+- Serialization/Deserialization of program/machine state -- Stretch goal
 - Other ideas/ optimizations as we work through the project :)
