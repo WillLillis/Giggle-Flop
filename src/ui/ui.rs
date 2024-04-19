@@ -1,11 +1,7 @@
-use iced::widget::button::{Status, Style, StyleFn};
-use iced::widget::pane_grid::Content;
 use iced::widget::scrollable::Properties;
-use iced::widget::{
-    button, checkbox, horizontal_space, pane_grid, Button, Column, Container, PaneGrid, Text,
-};
+use iced::widget::{button, checkbox, pane_grid, Button, Column, PaneGrid, Text};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
-use iced::{Alignment, Border, Color, Command, Element, Length, Shadow, Theme};
+use iced::{Alignment, Color, Command, Element, Length, Theme};
 use log::info;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -524,11 +520,14 @@ impl Default for GiggleFlopUI {
 }
 
 mod style {
-    use iced::{border::Radius, widget::{
-        button::{self, Status, Style},
-        container,
-    }};
-    use iced::{Background, Border, Color, Shadow, Theme, Vector};
+    use iced::{
+        border::Radius,
+        widget::{
+            button::{self, Status},
+            container,
+        },
+    };
+    use iced::{Border, Color, Shadow, Theme};
 
     pub fn title_bar(theme: &Theme) -> container::Style {
         let palette = theme.extended_palette();
@@ -554,7 +553,7 @@ mod style {
         }
     }
 
-    pub fn btn(theme: &Theme, status: Status) -> button::Style {
+    pub fn btn(_theme: &Theme, _status: Status) -> button::Style {
         button::Style {
             background: None,
             text_color: Color::WHITE,
@@ -567,17 +566,3 @@ mod style {
         }
     }
 }
-
-// struct ButtonColor {
-//     color: iced::Color,
-// }
-
-// impl button::StyleSheet for ButtonColor {
-//     fn active(&self) -> button::Style {
-//         button::Style {
-//             background: Some(iced::Background::Color(self.color)),
-//             ..Default::default()
-//         }
-//     }
-//     // other methods in Stylesheet have a default impl
-// }

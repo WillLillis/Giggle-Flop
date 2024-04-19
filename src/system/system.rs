@@ -66,7 +66,7 @@ impl System {
     // For debugging purposes, will need to make this
     // configurable later...
     pub fn default() -> Self {
-        let mut memory_system = Memory::new(4, &[32, 256], &[1, 2]);
+        let memory_system = Memory::new(4, &[32, 256], &[1, 2]);
         // Load up a sample program
         // we will simply add two numbers inside two registers
         // memory_system.force_store(128, MemBlock::Unsigned32(1));
@@ -983,8 +983,10 @@ impl System {
         self.clock += 1;
     }
 
+    // TODO: do this
     pub fn skip_instruction(&mut self) {
         info!("Starting an instruction step");
+        todo!()
     }
 }
 
