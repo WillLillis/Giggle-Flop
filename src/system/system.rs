@@ -53,6 +53,7 @@ pub struct System {
     pub clock: usize,
     pub memory_system: Memory,
     pub registers: RegisterSet,
+    should_use_pipeline: bool,
     // Pipeline v
     pub fetch: Option<u32>,
     pub decode: PipelineStageStatus,
@@ -82,6 +83,7 @@ impl System {
             pending_reg: HashSet::new(),
             // memory_system: Memory::new(4, &[32, 64], &[1, 5]),
             memory_system,
+            should_use_pipeline: true,
             registers: RegisterSet::new(),
             fetch: None,
             decode: PipelineStageStatus::Noop,
@@ -89,6 +91,27 @@ impl System {
             memory: PipelineStageStatus::Noop,
             writeback: PipelineStageStatus::Noop,
         }
+    }
+
+    pub fn reset(&mut self) {
+        let n_levels = self.memory_system.num_levels();
+
+        let mut capacities = Vec::new();
+        let mut latencies = Vec::new();
+        for level in 0..n_levels {
+            capacities.push(self.memory_system.num_lines(level).unwrap());
+            latencies.push(self.memory_system.get_latency(level).unwrap());
+        }
+
+        self.clock = 0;
+        self.pending_reg.clear();
+        self.memory_system = Memory::new(4, &capacities, &latencies);
+        self.registers = RegisterSet::new();
+        self.fetch = None;
+        self.decode = PipelineStageStatus::Noop;
+        self.execute = PipelineStageStatus::Noop;
+        self.memory = PipelineStageStatus::Noop;
+        self.writeback = PipelineStageStatus::Noop;
     }
 
     // TODO: Improve this idk
@@ -116,6 +139,14 @@ impl System {
             let data = MemBlock::Unsigned32(u32::from_be_bytes(bytes));
             self.memory_system.force_store(i * MEM_BLOCK_WIDTH, data);
         }
+        info!("Done");
+    }
+
+    fn run(&mut self) {
+        info!("Starting a non-pipelined cycle");
+        // just going to make this an absolutely disgusting monolith of a function
+        // for now, will clean up "later"
+        todo!()
     }
 
     fn pipeline_run(&mut self) {
@@ -976,7 +1007,11 @@ impl System {
 
     pub fn step(&mut self) {
         info!("Starting a system step");
-        self.pipeline_run();
+        if self.should_use_pipeline() {
+            self.pipeline_run();
+        } else {
+            self.run();
+        }
         info!("Updating the clock");
         self.memory_system.update_clock();
         info!("Incrementing the clock");
@@ -987,6 +1022,14 @@ impl System {
     pub fn skip_instruction(&mut self) {
         info!("Starting an instruction step");
         todo!()
+    }
+
+    fn should_use_pipeline(&self) -> bool {
+        self.should_use_pipeline
+    }
+
+    pub fn toggle_pipeline(&mut self) {
+        self.should_use_pipeline = !self.should_use_pipeline;
     }
 }
 

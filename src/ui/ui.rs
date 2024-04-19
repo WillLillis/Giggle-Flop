@@ -1,7 +1,7 @@
 use iced::widget::scrollable::Properties;
 use iced::widget::{button, checkbox, pane_grid, Button, Column, PaneGrid, Text};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
-use iced::{Alignment, Color, Command, Element, Length, Theme};
+use iced::{Alignment, Color, Command, Element, Length, Subscription, Theme};
 use log::info;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -16,6 +16,7 @@ static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 
 pub fn enter() -> iced::Result {
     iced::program("Giggle-Flop", GiggleFlopUI::update, GiggleFlopUI::view)
+        .subscription(GiggleFlopUI::subscription)
         .theme(GiggleFlopUI::theme)
         .run()
 }
@@ -24,6 +25,7 @@ struct GiggleFlopUI {
     system: System,
     memory_levels: Vec<usize>,
     current_memory_level: usize,
+    run: bool,
     register_groups: Vec<RegisterGroup>,
     current_register_group: RegisterGroup,
     current_scroll_offset: scrollable::RelativeOffset,
@@ -40,6 +42,7 @@ enum Message {
     SelectMemoryLevel(usize),
     SelectRegisterGroup(RegisterGroup),
     AdvanceClock,
+    RunProgram,
     AdvanceInstruction,
     SetBreakpoint,
     UsePipeline(bool),
@@ -83,6 +86,7 @@ impl GiggleFlopUI {
         let program_counter = system.registers.program_counter;
         let (panes, _) = pane_grid::State::new(Pane::new());
 
+        // Create these by reading from memory?
         let instructions = Self::get_instructions_from_file().unwrap();
         let mut instr_obj = Vec::new();
         for (line, instr) in instructions.into_iter().enumerate() {
@@ -96,6 +100,7 @@ impl GiggleFlopUI {
         GiggleFlopUI {
             memory_levels,
             current_memory_level: system.memory_system.num_levels() - 1,
+            run: false,
             register_groups,
             current_register_group: RegisterGroup::General,
             current_scroll_offset: scrollable::RelativeOffset::START,
@@ -127,29 +132,36 @@ impl GiggleFlopUI {
             }
             Message::AdvanceClock => {
                 self.program_counter = self.system.registers.program_counter;
-                println!("program counter: {}", self.program_counter);
+                //println!("program counter: {}", self.program_counter);
+                // TODO: Clean this up?
                 for line in &mut self.instr_lines {
                     line.is_green = line.number == (self.program_counter / 32 + 1) as usize;
                 }
                 self.system.step();
                 Command::none()
             }
+            Message::RunProgram => {
+                self.run = !self.run;
+                Command::none()
+            }
             Message::AdvanceInstruction => {
                 // TODO: this
-                // self.system.
+                // does this need to be a thing?
                 Command::none()
             }
             Message::SetBreakpoint => {
                 // TODO: this
                 Command::none()
             }
-            Message::UsePipeline(default) => {
+            Message::UsePipeline(val) => {
                 // TODO: this
-                self.use_pipeline = default;
+                self.system.reset();
+                self.use_pipeline = val;
                 Command::none()
             }
             Message::LoadProgram => {
                 // TODO: Fill in later...
+                self.system.reset();
                 self.system.load_program();
                 Command::none()
             }
@@ -190,6 +202,11 @@ impl GiggleFlopUI {
                     .padding(10)
                     .on_press(Message::AdvanceClock)
             };
+            let run_button = || {
+                button(if self.run { "Pause" } else { "Run" })
+                    .padding(10)
+                    .on_press(Message::RunProgram)
+            };
             let load_button = || {
                 button("Load test program")
                     .padding(10)
@@ -214,6 +231,7 @@ impl GiggleFlopUI {
                 row![
                     text(clock_text),
                     step_button(),
+                    run_button(),
                     load_button(),
                     break_button(),
                     skip_instruction_button(),
@@ -505,6 +523,15 @@ impl GiggleFlopUI {
         ]
         .height(Length::Fill)
         .into()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        if self.run {
+            // NOTE: 1ms is fairly arbitrary. Too fast (e.g. 1ns) and the UI becomes unresponsive though
+            iced::time::every(std::time::Duration::from_millis(1)).map(|_| Message::AdvanceClock)
+        } else {
+            Subscription::none()
+        }
     }
 
     #[allow(clippy::unused_self)]
