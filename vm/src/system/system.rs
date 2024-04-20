@@ -70,7 +70,7 @@ impl System {
         Self {
             clock: 0,
             pending_reg: HashSet::new(),
-            memory_system: Memory::new(4, &[32, 256], &[1, 100]),
+            memory_system: Memory::new(4, &[32, 256], &[1, 2]),
             should_use_pipeline: true,
             registers: RegisterSet::new(),
             fetch: None,
@@ -104,7 +104,7 @@ impl System {
 
     // TODO: Improve this idk
     pub fn load_program(&mut self) {
-        let program_file = "a";
+        let program_file = "demo_bin";
         info!("Loading program file {program_file}");
         let program = std::fs::read(program_file).unwrap();
         info!("Loaded: {:?}", program);

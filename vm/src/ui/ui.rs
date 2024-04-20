@@ -183,7 +183,7 @@ impl GiggleFlopUI {
     }
 
     fn get_instructions_from_file() -> Result<Vec<String>, std::io::Error> {
-        let program_file = "test.gf";
+        let program_file = "demo.gf";
         info!("Loading instruction file {program_file}");
         let f = File::open(program_file).expect("Unable to open instruction file");
         let f = BufReader::new(f);
