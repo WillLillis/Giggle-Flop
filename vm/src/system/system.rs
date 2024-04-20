@@ -67,22 +67,10 @@ impl System {
     // For debugging purposes, will need to make this
     // configurable later...
     pub fn default() -> Self {
-        let memory_system = Memory::new(4, &[32, 256], &[1, 2]);
-        // Load up a sample program
-        // we will simply add two numbers inside two registers
-        // memory_system.force_store(128, MemBlock::Unsigned32(1));
-        // let add_imm_instr = 0b0_0000_0000_0000_0000_0001_0000_1001_100;
-        // let load_instr = 0b0000_0000_0000_0100_0000_0000_1001_0100;
-        // let add_instr = 0b0000_0000_0000_0001_1001_0000_1000_1101;
-        // let tmp_add_instr = decode_raw_instr(add_imm_instr);
-        // let tmp_load_instr = decode_raw_instr(load_instr);
-        // memory_system.force_store(0, MemBlock::Unsigned32(add_imm_instr));
-
         Self {
             clock: 0,
             pending_reg: HashSet::new(),
-            // memory_system: Memory::new(4, &[32, 64], &[1, 5]),
-            memory_system,
+            memory_system: Memory::new(4, &[32, 256], &[1, 100]),
             should_use_pipeline: true,
             registers: RegisterSet::new(),
             fetch: None,
@@ -142,10 +130,15 @@ impl System {
         info!("Done");
     }
 
-    fn run(&mut self) {
+    fn run_no_pipeline(&mut self) {
         info!("Starting a non-pipelined cycle");
         // just going to make this an absolutely disgusting monolith of a function
         // for now, will clean up "later"
+
+        // fetch instruction from memory
+        // decode
+        // if it's a memory, sit in a loop waiting for the load to finish
+        // execute the instruction
         todo!()
     }
 
@@ -1010,7 +1003,7 @@ impl System {
         if self.should_use_pipeline() {
             self.pipeline_run();
         } else {
-            self.run();
+            self.run_no_pipeline();
         }
         info!("Updating the clock");
         self.memory_system.update_clock();

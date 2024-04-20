@@ -612,8 +612,8 @@ fn get_instructions(
 
 fn write_program(instrs: &Vec<Instruction>, opts: &AssemblerOptions) -> Result<()> {
     // get the file open
-    let output_path = if let Some(ref path) = opts.output_path {
-        path.canonicalize().unwrap_or(DEFAULT_OUTPUT_PATH.into())
+    let output_path: PathBuf = if let Some(ref path) = opts.output_path {
+        path.into()
     } else {
         DEFAULT_OUTPUT_PATH.into()
     };
@@ -649,6 +649,7 @@ fn assemble(opts: &AssemblerOptions) -> Result<()> {
 fn main() {
     let args = AssemblerArgs::parse();
     let opts: AssemblerOptions = args.into();
+    println!("{:?}", opts);
 
     if let Err(e) = assemble(&opts) {
         eprintln!("Error: {e}");
