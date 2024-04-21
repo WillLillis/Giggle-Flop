@@ -4,15 +4,28 @@ use log::{error, info};
 
 use crate::instruction::instruction::{decode_raw_instr, Instruction, RawInstruction};
 use crate::memory::memory_system::{
-    LoadRequest, LoadResponse, MemRequest, MemResponse, MemType, Memory, MEM_BLOCK_WIDTH,
+    LoadRequest, LoadResponse, MemRequest, MemResponse, MemType, Memory, StoreRequest,
+    MEM_BLOCK_WIDTH,
 };
 use crate::register::register_system::{
-    get_comparison_flags, RegisterGroup, RegisterSet, FLAG_COUNT, RET_REG,
+    get_comparison_flags, FlagIndex, Register, RegisterGroup, RegisterSet, FLAG_COUNT, RET_REG,
 };
 
 use crate::memory::memory_system::MemBlock;
 
 pub type Cycle = usize;
+
+/// Messages to ne passed back from the pipeline_run() and run_no_pipeline()
+/// functions to indicate if the system should halt execution, or if some other
+/// important state changes occurred
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Default)]
+pub enum SystemMessage {
+    Halt,
+    #[default]
+    InstructionCompleted,
+    InstructionPending,
+    // fill in others as needed
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Default)]
@@ -71,7 +84,8 @@ impl System {
             clock: 0,
             pending_reg: HashSet::new(),
             memory_system: Memory::new(4, &[32, 256], &[1, 2]),
-            should_use_pipeline: true,
+            //should_use_pipeline: true,
+            should_use_pipeline: false,
             registers: RegisterSet::new(),
             fetch: None,
             decode: PipelineStageStatus::Noop,
@@ -130,21 +144,874 @@ impl System {
         info!("Done");
     }
 
-    fn run_no_pipeline(&mut self) {
-        info!("Starting a non-pipelined cycle");
-        // just going to make this an absolutely disgusting monolith of a function
+    fn run_no_pipeline(&mut self) -> SystemMessage {
+        info!("NoPipeline: Starting a non-pipelined cycle");
+        // NOTE: just going to make this an absolutely disgusting monolith of a function
         // for now, will clean up "later"
 
         // fetch instruction from memory
-        // decode
-        // if it's a memory, sit in a loop waiting for the load to finish
-        // execute the instruction
-        todo!()
+        let req = MemRequest::Load(LoadRequest {
+            issuer: PipelineStage::Fetch,
+            address: self.registers.program_counter as usize,
+            width: MemType::Unsigned32,
+        });
+        // need to store this across calls, otherwise we can block
+        let raw_instr = if let Some(raw) = self.fetch {
+            raw
+        } else {
+            let raw_resp = self.memory_system.request(&req);
+            if let Ok(MemResponse::Load(LoadResponse { data })) = raw_resp {
+                let block_data = data
+                    .get_contents(self.registers.program_counter as usize)
+                    .unwrap();
+                if let Some(raw) = block_data.get_unsigned() {
+                    self.fetch = Some(raw);
+                    raw
+                } else {
+                    info!(
+                        "NoPipeline: Got unnexpected data for instruction fetch, passing on a noop"
+                    );
+                    todo!()
+                }
+            } else {
+                info!(
+                    "NoPipeline: Recieved resp from memory system {:?}",
+                    raw_resp
+                );
+                return SystemMessage::InstructionPending;
+            }
+        };
+        info!("NoPipeline: Fetched {raw_instr}");
+
+        let decoded_instr = if let Some(instr) = decode_raw_instr(raw_instr) {
+            instr
+        } else {
+            error!("NoPipeline: Failed to decode raw instruction {raw_instr}, passing on a NOOP");
+            todo!()
+        };
+        info!("NoPipeline: Decoded instruction to {:?}", decoded_instr);
+        // TODO: Just do the rest of the work here? Will be a little repeptive but
+        // that's fine for now...
+        match decoded_instr {
+            Instruction::Type0 { opcode } => {
+                info!("NoPipeline: Got Type 0 instruction, opcode: {opcode}");
+                match opcode {
+                    // RET
+                    0 => {
+                        let jump_addr = self.registers.general[RET_REG].data.force_unsigned();
+                        info!("NoPipeline: Jump address of {jump_addr} taken from Register R{RET_REG}");
+                        self.registers.program_counter = jump_addr;
+                        self.fetch = None;
+                        return SystemMessage::InstructionCompleted;
+                    }
+                    // HALT
+                    1 => {
+                        info!("NoPipeline: Halting");
+                        self.fetch = None;
+                        return SystemMessage::Halt;
+                    }
+                    _ => {
+                        error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
+                    }
+                }
+            }
+            Instruction::Type1 { opcode, immediate } => {
+                info!("NoPipeline: Got Type 0 instruction, opcode: {opcode}");
+                match opcode {
+                    // CALL
+                    0 => {
+                        info!("NoPipeline: CALL instruction");
+                        self.registers.general[RET_REG] = Register {
+                            data: MemBlock::Unsigned32(self.registers.program_counter),
+                        };
+                        self.registers.program_counter = immediate;
+                        self.fetch = None;
+                        return SystemMessage::InstructionCompleted;
+                    }
+                    // JE
+                    1 => {
+                        info!("NoPipeline: JE instruction");
+                        if self.registers.status.get(FlagIndex::EQ as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter = immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // JNE
+                    2 => {
+                        info!("NoPipeline: JNE instruction");
+                        if !self.registers.status.get(FlagIndex::EQ as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter = immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // JGT
+                    3 => {
+                        info!("NoPipeline: JGT instruction");
+                        if self.registers.status.get(FlagIndex::GT as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter = immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // JLT
+                    4 => {
+                        info!("NoPipeline: JLT instruction");
+                        if self.registers.status.get(FlagIndex::LT as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter = immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // JGTE
+                    5 => {
+                        info!("NoPipeline: JGTE instruction");
+                        if self.registers.status.get(FlagIndex::EQ as usize)
+                            || self.registers.status.get(FlagIndex::GT as usize)
+                        {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter = immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // JLTE
+                    6 => {
+                        info!("NoPipeline: JLTE instruction");
+                        if self.registers.status.get(FlagIndex::EQ as usize)
+                            || self.registers.status.get(FlagIndex::LT as usize)
+                        {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter = immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // TODO: Jump relative is half worthless because we don't allow negative
+                    // immediate arguments...fix this
+                    // IJE
+                    7 => {
+                        info!("NoPipeline: IJE instruction");
+                        if self.registers.status.get(FlagIndex::EQ as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter += immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // IJNE
+                    8 => {
+                        info!("NoPipeline: IJNE instruction");
+                        if !self.registers.status.get(FlagIndex::EQ as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter += immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // IJGT
+                    9 => {
+                        info!("NoPipeline: IJGT instruction");
+                        if self.registers.status.get(FlagIndex::GT as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter += immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // IJLT
+                    10 => {
+                        info!("NoPipeline: IJLT instruction");
+                        if self.registers.status.get(FlagIndex::LT as usize) {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter += immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // IJGTE
+                    11 => {
+                        info!("NoPipeline: IJGTE instruction");
+                        if self.registers.status.get(FlagIndex::EQ as usize)
+                            || self.registers.status.get(FlagIndex::GT as usize)
+                        {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter += immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    // IJLTE
+                    12 => {
+                        info!("NoPipeline: IJLTE instruction");
+                        if self.registers.status.get(FlagIndex::EQ as usize)
+                            || self.registers.status.get(FlagIndex::LT as usize)
+                        {
+                            info!("NoPipeline: Jumping");
+                            self.registers.program_counter += immediate;
+                            self.fetch = None;
+                            return SystemMessage::InstructionCompleted;
+                        } else {
+                            info!("NoPipeline: Not jumping");
+                        }
+                    }
+                    _ => {
+                        error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
+                    }
+                }
+            }
+            Instruction::Type2 {
+                opcode,
+                reg_1,
+                reg_2,
+            } => match opcode {
+                0..=2 => {
+                    // TODO: Account for bit widths
+                    info!("NoPipeline: Comparing general registers {reg_1} and {reg_2}");
+                    let flags = get_comparison_flags(
+                        self.registers.general[reg_1],
+                        self.registers.general[reg_2],
+                    );
+                    info!("NoPipeline: Comparison result: {:?}", flags);
+                    for (idx, flag) in flags.iter().enumerate() {
+                        if let Some(new_val) = flag {
+                            self.registers.status.set(idx, *new_val);
+                        }
+                    }
+                }
+                //LDIN8
+                3 => {
+                    let address = self.registers.general[reg_2]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Unsigned8,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Unsigned8(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned8(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to u8");
+                            let val = u8::try_from(block_data.force_unsigned()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned8(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                //LDIN16
+                4 => {
+                    let address = self.registers.general[reg_2]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Unsigned16,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Unsigned16(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned16(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to u16");
+                            let val = u16::try_from(block_data.force_unsigned()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned16(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                //LDIN32
+                5 => {
+                    let address = self.registers.general[reg_2]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Unsigned32,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Unsigned32(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned32(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to u32");
+                            let val = u32::try_from(block_data.force_unsigned()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned32(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                _ => {
+                    error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
+                }
+            },
+            Instruction::Type3 {
+                opcode,
+                freg_1,
+                freg_2,
+            } => {
+                // CMPF
+                if opcode == 0 {
+                    info!("NoPipeline: Comparing floating point registers {freg_1} and {freg_2}");
+                    let flags = get_comparison_flags(
+                        self.registers.float[freg_1],
+                        self.registers.float[freg_2],
+                    );
+                    info!("NoPipeline: Comparison result: {:?}", flags);
+                    for (idx, flag) in flags.iter().enumerate() {
+                        if let Some(new_val) = flag {
+                            self.registers.status.set(idx, *new_val);
+                        }
+                    }
+                } else {
+                    error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
+                }
+            }
+            Instruction::Type4 {
+                opcode,
+                reg_1,
+                immediate,
+            } => match opcode {
+                // LD8
+                0 => {
+                    let address = self.registers.general[reg_1]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Unsigned8,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Unsigned8(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned8(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to u8");
+                            let val = u8::try_from(block_data.force_unsigned()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned8(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // LD16
+                1 => {
+                    let address = self.registers.general[reg_1]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Unsigned16,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Unsigned16(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned16(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to u16");
+                            let val = u16::try_from(block_data.force_unsigned()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned16(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // LD32
+                2 => {
+                    let address = self.registers.general[reg_1]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Unsigned32,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Unsigned32(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned32(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to u32");
+                            let val = u32::try_from(block_data.force_unsigned()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Unsigned32(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // LDI8
+                3 => {
+                    let address = self.registers.general[reg_1]
+                        .data
+                        .force_signed()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Signed8,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Signed8(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Signed8(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to i8");
+                            let val = i8::try_from(block_data.force_signed()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Signed8(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // LDI16
+                4 => {
+                    let address = self.registers.general[reg_1]
+                        .data
+                        .force_signed()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Signed16,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Signed16(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Signed16(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to i16");
+                            let val = i16::try_from(block_data.force_signed()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Signed16(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // LDI32
+                5 => {
+                    let address = self.registers.general[reg_1]
+                        .data
+                        .force_signed()
+                        .try_into()
+                        .unwrap();
+                    let req = MemRequest::Load(LoadRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        width: MemType::Signed32,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
+                        let block_data = data.get_contents(address).unwrap();
+                        if let MemBlock::Signed32(val) = block_data {
+                            info!("NoPipeline: Got {val} back from memory request");
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Signed32(val),
+                            };
+                        } else {
+                            info!("NoPipeline: Forcing to memory contents to u32");
+                            let val = i32::try_from(block_data.force_unsigned()).unwrap();
+                            self.registers.general[reg_1] = Register {
+                                data: MemBlock::Signed32(val),
+                            };
+                        }
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // ST8
+                6 => {
+                    info!("NoPipeline: ST8");
+                    let req = MemRequest::Store(StoreRequest {
+                        issuer: PipelineStage::Execute,
+                        address: usize::try_from(immediate).unwrap(),
+                        data: self.registers.general[reg_1].data,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::StoreComplete) = resp {
+                        info!("NoPipeline: Store complete");
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // ST16
+                7 => {
+                    info!("NoPipeline: ST16");
+                    let req = MemRequest::Store(StoreRequest {
+                        issuer: PipelineStage::Execute,
+                        address: usize::try_from(immediate).unwrap(),
+                        data: self.registers.general[reg_1].data,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::StoreComplete) = resp {
+                        info!("NoPipeline: Store complete");
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // ST32
+                8 => {
+                    info!("NoPipeline: ST32");
+                    let req = MemRequest::Store(StoreRequest {
+                        issuer: PipelineStage::Execute,
+                        address: usize::try_from(immediate).unwrap(),
+                        data: self.registers.general[reg_1].data,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::StoreComplete) = resp {
+                        info!("NoPipeline: Store complete");
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // ADDIM
+                9 => {
+                    // TODO: Add overflow checks later...
+                    info!(
+                        "NoPipeline: Adding immediate {} to register {}",
+                        immediate, reg_1
+                    );
+                    let data = self.registers.general[reg_1].data.add_immediate(immediate);
+                    self.registers.general[reg_1] = Register { data };
+                }
+                _ => {
+                    error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
+                }
+            },
+            Instruction::Type5 {
+                opcode,
+                reg_1,
+                reg_2,
+                reg_3,
+            } => {
+                // TODO: Created signed and unsigned variants...
+                match opcode {
+                    // ADDI
+                    0 => {
+                        // TODO: Add overflow checks later...
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .add_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Adding register {} to register {}",
+                            reg_2, reg_3
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // SUBI
+                    1 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .sub_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Subtracting register {} from register {}",
+                            reg_3, reg_2
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // MULI
+                    2 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .mul_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Multiplying register {} with register {}",
+                            reg_2, reg_3
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // DIVI
+                    3 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .div_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Dividing register {} by register {}",
+                            reg_2, reg_3
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // MODI
+                    4 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .mod_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Modulo register {} by register {}",
+                            reg_2, reg_3
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // RBSI
+                    5 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .right_shift_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Right bit shift register {} by register {}",
+                            reg_2, reg_3
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // XORI
+                    6 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .xor_register(self.registers.general[reg_3].data);
+                        info!("NoPipeline: XOR register {} with register {}", reg_2, reg_3);
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // ANDI
+                    7 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .and_register(self.registers.general[reg_3].data);
+                        info!("NoPipeline: AND register {} with register {}", reg_2, reg_3);
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // ORI
+                    8 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .or_register(self.registers.general[reg_3].data);
+                        info!("NoPipeline: OR register {} with register {}", reg_2, reg_3);
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // ADDU
+                    9 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .add_register(self.registers.general[reg_3].data);
+                        info!("NoPipeline: Add register {} with register {}", reg_2, reg_3);
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // SUBU
+                    10 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .sub_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Subtract register {} from register {}",
+                            reg_3, reg_2
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // MULU
+                    11 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .mul_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Multiply register {} with register {}",
+                            reg_2, reg_3
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // DIVU
+                    12 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .div_register(self.registers.general[reg_3].data);
+                        info!(
+                            "NoPipeline: Divide register {} by register {}",
+                            reg_2, reg_3
+                        );
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    // MODU
+                    13 => {
+                        let data = self.registers.general[reg_2]
+                            .data
+                            .mod_register(self.registers.general[reg_3].data);
+                        info!("NoPipeline: Mod register {} by register {}", reg_2, reg_3);
+                        self.registers.general[reg_1] = Register { data };
+                    }
+                    _ => {
+                        error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
+                    }
+                }
+            }
+            Instruction::Type6 {
+                opcode,
+                freg_1,
+                freg_2,
+                freg_3,
+            } => {
+                match opcode {
+                    // ADDF
+                    0 => {
+                        // TODO: Add overflow checks later...
+                        let data = self.registers.float[freg_2]
+                            .data
+                            .add_register(self.registers.float[freg_3].data);
+                        info!(
+                            "Pipeline::Execute: Add register {} with register {}",
+                            freg_2, freg_3
+                        );
+                        self.registers.float[freg_1] = Register { data };
+                    }
+                    // SUBF
+                    1 => {
+                        let data = self.registers.float[freg_2]
+                            .data
+                            .sub_register(self.registers.float[freg_3].data);
+                        info!(
+                            "Pipeline::Execute: Subtracting register {} from register {}",
+                            freg_3, freg_2
+                        );
+                        self.registers.float[freg_1] = Register { data };
+                    }
+                    // MULF
+                    2 => {
+                        let data = self.registers.float[freg_2]
+                            .data
+                            .mul_register(self.registers.float[freg_3].data);
+                        info!(
+                            "Pipeline::Execute: Multiplying register {} with register {}",
+                            freg_2, freg_3
+                        );
+                        self.registers.float[freg_1] = Register { data };
+                    }
+                    // DIVF
+                    3 => {
+                        let data = self.registers.float[freg_2]
+                            .data
+                            .div_register(self.registers.float[freg_3].data);
+                        info!(
+                            "Pipeline::Execute: Dividing register {} by register {}",
+                            freg_2, freg_3
+                        );
+                        self.registers.float[freg_1] = Register { data };
+                    }
+                    _ => {
+                        error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
+                    }
+                }
+            }
+        }
+
+        // By default, the program counter will increment here to advance to the
+        // next instruction. Instructions in an unfinished state at the end of the
+        // current clock cycle (e.g. waiting on a request to return from the memory
+        // subsystem) should return out of the function *early* to avoid skipping
+        // to the next instruction
+        self.registers.step_pc();
+        self.fetch = None;
+        SystemMessage::InstructionCompleted
     }
 
-    fn pipeline_run(&mut self) {
+    fn pipeline_run(&mut self) -> SystemMessage {
         info!("Entering the pipeline");
-        self.pipeline_writeback();
+        self.pipeline_writeback()
     }
 
     #[allow(clippy::too_many_lines)] // TODO: Fix this later..
@@ -790,7 +1657,9 @@ impl System {
             PipelineStageStatus::Instruction(instr) => {
                 info!("Pipeline::Memory: Have current instruction: {:?}", instr);
                 if let Some(instruction) = instr.decode_instr {
-                    if let Some(req) = instruction.get_mem_req(Some(PipelineStage::Memory)) {
+                    if let Some(req) = instruction
+                        .get_mem_req(Some(PipelineStage::Memory), &self.registers.general)
+                    {
                         // If load, call memory system
                         //  - if hit and delay or miss, get wait back
                         //      - assuming we have to pass the Wait/Stall along...
@@ -911,7 +1780,7 @@ impl System {
         }
     }
 
-    fn pipeline_writeback(&mut self) {
+    fn pipeline_writeback(&mut self) -> SystemMessage {
         info!(
             "Pipeline::Writeback: Pipeline: In writeback stage, current instruction: {:?}",
             self.writeback
@@ -988,27 +1857,40 @@ impl System {
             }
         }
 
+        // if we have a Halt instr, we need to pass that message back to the system
+
         // call M
         //  - Save instr returned from M for next cycle
+        let finished_instr = self.writeback;
         info!("Pipeline::Writeback: Calling memory stage");
         self.writeback = self.pipeline_memory();
         info!(
             "Pipeline::Writeback: Saving message returned from memory stage: {:?}",
             self.writeback
         );
+        if let PipelineStageStatus::Instruction(PipelineInstruction {
+            decode_instr: Some(Instruction::Type0 { opcode: 1 }),
+            ..
+        }) = finished_instr
+        {
+            SystemMessage::Halt
+        } else {
+            SystemMessage::InstructionCompleted
+        }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> SystemMessage {
         info!("Starting a system step");
-        if self.should_use_pipeline() {
-            self.pipeline_run();
+        let msg = if self.should_use_pipeline() {
+            self.pipeline_run()
         } else {
-            self.run_no_pipeline();
-        }
-        info!("Updating the clock");
+            self.run_no_pipeline()
+        };
+        info!("Updating the memory system's clock");
         self.memory_system.update_clock();
         info!("Incrementing the clock");
         self.clock += 1;
+        msg
     }
 
     // TODO: do this

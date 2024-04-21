@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;
 
 use crate::register::register_system::RegisterGroup;
-use crate::system::system::System;
+use crate::system::system::{System, SystemMessage};
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 
@@ -137,7 +137,11 @@ impl GiggleFlopUI {
                 for line in &mut self.instr_lines {
                     line.is_green = line.number == (self.program_counter / 32 + 1) as usize;
                 }
-                self.system.step();
+                // TODO: Need to handle halts here...
+                if let SystemMessage::Halt = self.system.step() {
+                    info!("Got halt message");
+                    self.run = false;
+                }
                 Command::none()
             }
             Message::RunProgram => {

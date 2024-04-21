@@ -2,7 +2,7 @@ use log::{error, info};
 
 use crate::{
     memory::memory_system::{LoadRequest, MemRequest, MemType},
-    register::register_system::{RegisterGroup, RET_REG},
+    register::register_system::{Register, RegisterGroup, RegisterSet, RET_REG},
     system::system::PipelineStage,
 };
 
@@ -54,7 +54,11 @@ pub enum Instruction {
 
 impl Instruction {
     /// Returns the associated `MemoryRequest` for an instruction if appropriate
-    pub fn get_mem_req(&self, issuer: Option<PipelineStage>) -> Option<MemRequest> {
+    pub fn get_mem_req(
+        &self,
+        issuer: Option<PipelineStage>,
+        gen_regs: &[Register],
+    ) -> Option<MemRequest> {
         info!("Generating memory request for instruction {:?}", self);
         match self {
             Instruction::Type2 {
@@ -70,9 +74,13 @@ impl Instruction {
                         return None;
                     }
                 };
+
+                let address =
+                    usize::try_from(gen_regs[*reg_2].data.force_unsigned()).unwrap_or_default();
+
                 Some(MemRequest::Load(LoadRequest {
                     issuer: issuer.unwrap_or_default(),
-                    address: *reg_2,
+                    address, // BUG: Fix this, don't treat register as literal value
                     width: mem_type,
                 }))
             }

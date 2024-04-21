@@ -649,7 +649,6 @@ fn assemble(opts: &AssemblerOptions) -> Result<()> {
 fn main() {
     let args = AssemblerArgs::parse();
     let opts: AssemblerOptions = args.into();
-    println!("{:?}", opts);
 
     if let Err(e) = assemble(&opts) {
         eprintln!("Error: {e}");

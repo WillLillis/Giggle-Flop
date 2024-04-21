@@ -67,7 +67,7 @@ impl MemBlock {
         }
     }
 
-    fn get_unsigned(self) -> Option<u32> {
+    pub fn get_unsigned(self) -> Option<u32> {
         match self {
             Self::Unsigned8(data) => Some(u32::from(data)),
             Self::Unsigned16(data) => Some(u32::from(data)),
@@ -76,7 +76,7 @@ impl MemBlock {
         }
     }
 
-    fn get_signed(self) -> Option<i32> {
+    pub fn get_signed(self) -> Option<i32> {
         match self {
             Self::Signed8(data) => Some(i32::from(data)),
             Self::Signed16(data) => Some(i32::from(data)),
@@ -85,7 +85,7 @@ impl MemBlock {
         }
     }
 
-    fn get_float(self) -> Option<f32> {
+    pub fn get_float(self) -> Option<f32> {
         if let Self::Float32(data) = self {
             Some(data)
         } else {
@@ -93,7 +93,7 @@ impl MemBlock {
         }
     }
 
-    fn force_unsigned(self) -> u32 {
+    pub fn force_unsigned(self) -> u32 {
         match self {
             MemBlock::Unsigned8(data) => u32::from(data),
             MemBlock::Unsigned16(data) => u32::from(data),
@@ -105,7 +105,7 @@ impl MemBlock {
         }
     }
 
-    fn force_signed(self) -> i32 {
+    pub fn force_signed(self) -> i32 {
         match self {
             MemBlock::Unsigned8(data) => i32::from(data),
             MemBlock::Unsigned16(data) => i32::from(data),
