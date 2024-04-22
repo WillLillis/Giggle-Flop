@@ -265,6 +265,51 @@ impl GiggleFlopUI {
         container(content).padding(20).center_x().center_y().into()
     }
 
+    fn get_pipeline_element(&self) -> Element<Message> {
+        let pipeline_content: Element<Message> = Element::from({
+            let fetch_state = format!("{:?}", self.system.fetch.raw_instr);
+            let decode_state = format!("{:?}", self.system.decode);
+            let execute_state = format!("{:?}", self.system.execute);
+            let memory_state = format!("{:?}", self.system.memory);
+            let writeback_state = format!("{:?}", self.system.writeback);
+            Scrollable::with_direction(
+                row![
+                    column![text("Fetch: "), text(fetch_state)].align_items(Alignment::Center),
+                    column![text("Decode: "), text(decode_state)].align_items(Alignment::Center),
+                    column![text("Execute: "), text(execute_state)].align_items(Alignment::Center),
+                    column![text("Memory: "), text(memory_state)].align_items(Alignment::Center),
+                    column![text("Writeback: "), text(writeback_state)]
+                        .align_items(Alignment::Center),
+                ]
+                .align_items(Alignment::Start)
+                .spacing(200),
+                {
+                    let properties = Properties::new()
+                        .width(10)
+                        .margin(0)
+                        .scroller_width(10)
+                        .alignment(scrollable::Alignment::Start);
+
+                    scrollable::Direction::Both {
+                        horizontal: properties,
+                        vertical: properties,
+                    }
+                },
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .id(SCROLLABLE_ID.clone())
+            .on_scroll(Message::Scrolled)
+        });
+
+        let content: Element<Message> = column![pipeline_content]
+            .align_items(Alignment::Center)
+            .spacing(10)
+            .into();
+
+        container(content).padding(20).center_x().center_y().into()
+    }
+
     fn get_register_element(&self) -> Element<Message> {
         let scrollable_content: Element<Message> = Element::from({
             Scrollable::with_direction(
@@ -538,9 +583,33 @@ impl GiggleFlopUI {
             .padding(10)
             .into();
 
+        let pipeline_block = PaneGrid::new(&self.panes, |_id, _pane, _is_maximized| {
+            let title = row!["Pipeline Stages"].spacing(5);
+
+            let title_bar = pane_grid::TitleBar::new(title)
+                .padding(10)
+                .style(style::title_bar);
+
+            pane_grid::Content::new(self.get_pipeline_element())
+                .title_bar(title_bar)
+                .style(style::pane)
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .spacing(10)
+        .on_click(Message::Clicked)
+        .on_resize(10, Message::Resized);
+
+        let pipeline_pane: Element<Message> = container(pipeline_block)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(10)
+            .into();
+
         column![
             config_pane,
-            row![instruction_pane, register_pane, memory_pane]
+            row![instruction_pane, register_pane, memory_pane],
+            pipeline_pane
         ]
         .height(Length::Fill)
         .into()
