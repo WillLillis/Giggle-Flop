@@ -30,7 +30,7 @@ struct GiggleFlopUI {
     system: System,
     memory_levels: Vec<usize>,
     current_memory_level: usize,
-    run: bool,
+    run: bool, // run without stopping after every clock cycle
     register_groups: Vec<RegisterGroup>,
     current_register_group: RegisterGroup,
     current_scroll_offset: scrollable::RelativeOffset,
@@ -55,14 +55,6 @@ enum Message {
     // maybe delete
     Clicked(pane_grid::Pane),
     Resized(pane_grid::ResizeEvent),
-}
-
-#[derive(Clone)]
-struct Line {
-    number: usize,
-    instr: String,
-    is_red: bool,
-    is_green: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -91,16 +83,6 @@ impl GiggleFlopUI {
         let (panes, _) = pane_grid::State::new(Pane::new());
 
         // Create these by reading from memory?
-        let instructions = Self::get_instructions_from_file().unwrap();
-        let mut instr_obj = Vec::new();
-        for (line, instr) in instructions.into_iter().enumerate() {
-            instr_obj.push(Line {
-                number: line + 1,
-                instr,
-                is_red: false,
-                is_green: false,
-            })
-        }
         GiggleFlopUI {
             memory_levels,
             current_memory_level: system.memory_system.num_levels() - 1,
@@ -219,8 +201,6 @@ impl GiggleFlopUI {
                 || checkbox("Use Pipeline", self.use_pipeline).on_toggle(Message::UsePipeline);
             let clock_text = format!("Clock: {}", self.system.clock);
             Scrollable::with_direction(
-                //column![
-                //column![text("TODO: Code goes here..."), step_button()]
                 row![
                     text(clock_text),
                     step_button(),
@@ -232,8 +212,6 @@ impl GiggleFlopUI {
                 .align_items(Alignment::Center)
                 .padding([0, 0, 0, 0])
                 .spacing(20),
-                //text(" ".repeat(8))
-                //], // padding so scrollbar doesn't cover text
                 {
                     let properties = Properties::new()
                         .width(10)
@@ -254,7 +232,6 @@ impl GiggleFlopUI {
         });
 
         let content: Element<Message> = column![config_content]
-            //let content: Element<Message> = config_content
             .align_items(Alignment::Center)
             .spacing(10)
             .into();
@@ -275,8 +252,8 @@ impl GiggleFlopUI {
                     .align_items(Alignment::Center)
                     .padding([0, 0, 0, 0])
                     .spacing(40),
-                    text(" ".repeat(8))
-                ], // padding so scrollbar doesn't cover text
+                    text(" ".repeat(8)) // padding so scrollbar doesn't cover text
+                ],
                 {
                     let properties = Properties::new()
                         .width(10)
@@ -302,7 +279,6 @@ impl GiggleFlopUI {
             Message::SelectRegisterGroup,
         );
 
-        // TODO: Use pretty printing crate?
         let content: Element<Message> = column![reg_select, scrollable_content]
             .align_items(Alignment::Start)
             .spacing(10)
@@ -327,8 +303,8 @@ impl GiggleFlopUI {
                     .align_items(Alignment::Center)
                     .padding([0, 0, 0, 0])
                     .spacing(40),
-                    text(" ".repeat(8))
-                ], // padding so scrollbar doesn't cover text
+                    text(" ".repeat(8)) // padding so scrollbar doesn't cover text
+                ],
                 {
                     let properties = Properties::new()
                         .width(10)
@@ -355,7 +331,6 @@ impl GiggleFlopUI {
         )
         .placeholder("Memory level");
 
-        // TODO: Use pretty printing crate?
         let content: Element<Message> = column![mem_level_select, scrollable_content]
             .align_items(Alignment::Start)
             .spacing(10)
@@ -365,8 +340,6 @@ impl GiggleFlopUI {
     }
 
     fn get_instruction_element(&self) -> Element<Message> {
-        // TODO: Need to add in address to label functionality
-        // first collect raw instructions 10 behind and 10 ahead of current program counter
         let curr_pc = self.system.registers.program_counter as usize;
         let lookahead = MEM_BLOCK_WIDTH * 10;
         let raw_instrs: Vec<(usize, Option<Instruction>)> = (curr_pc.saturating_sub(lookahead)
@@ -379,14 +352,27 @@ impl GiggleFlopUI {
 
         let mut column = Column::new();
         for (addr, decoded_instr) in raw_instrs {
+            let mut is_halt = false;
             let mut text = if let Some(instr) = decoded_instr {
-                Text::new(format!("0x{addr:08X}: {}", instr))
+                let formatted = format!("0x{addr:08X}: {}", instr);
+                is_halt = formatted.contains("HALT");
+                Text::new(formatted)
             } else {
                 Text::new(format!("0x{addr:08X}: INVALID INSTRUCTION"))
             };
 
-            if addr == usize::try_from(self.system.registers.program_counter).unwrap() {
-                text = text.color(Color::from_rgb(0.0, 1.0, 0.0));
+            // iterate through source addresses of instructions in pipeline (backwards)
+            if let Some(display_addr) = self.system.get_display_instr_addr() {
+                if addr == usize::try_from(display_addr).unwrap() {
+                    text = text.color(Color::from_rgb(0.0, 1.0, 0.0));
+                }
+            } else {
+                // if none of the stages have a valid source address in their state,
+                // then we must be blocked on an instruction fetch. We can just grab
+                // the program counter in this case
+                if addr == usize::try_from(self.system.registers.program_counter).unwrap() {
+                    text = text.color(Color::from_rgb(0.0, 1.0, 0.0));
+                }
             }
 
             let button = Button::new(text)
@@ -398,13 +384,16 @@ impl GiggleFlopUI {
                 })
                 .padding(0);
             column = column.push(button);
+            //
+            // TODO: Fix overshoot here by checking for HALT in string?
+            if is_halt {
+                break;
+            }
         }
 
         let scrollable_content: Element<Message> = Element::from({
             Scrollable::with_direction(
-                row![column // padding
-                    .align_items(Alignment::Start)
-                    .padding([0, 0, 0, 0])], // padding so scrollbar doesn't cover text
+                row![column.align_items(Alignment::Start).padding([0, 0, 0, 0])], // padding so scrollbar doesn't cover text
                 {
                     let properties = Properties::new()
                         .width(10)

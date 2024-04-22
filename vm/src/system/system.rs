@@ -62,13 +62,19 @@ pub enum PipelineInstructionResult {
            // a store to memory)
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FetchState {
+    pub src_addr: Option<usize>,
+    pub raw_instr: Option<u32>,
+}
+
 pub struct System {
     pub clock: usize,
     pub memory_system: Memory,
     pub registers: RegisterSet,
     should_use_pipeline: bool,
     // Pipeline v
-    pub fetch: Option<u32>,
+    pub fetch: FetchState,
     pub decode: PipelineStageStatus,
     pub execute: PipelineStageStatus,
     pub memory: PipelineStageStatus,
@@ -86,7 +92,7 @@ impl System {
             memory_system: Memory::new(4, &[32, 256], &[1, 2]),
             should_use_pipeline: true,
             registers: RegisterSet::new(),
-            fetch: None,
+            fetch: FetchState::default(),
             decode: PipelineStageStatus::Noop,
             execute: PipelineStageStatus::Noop,
             memory: PipelineStageStatus::Noop,
@@ -108,7 +114,7 @@ impl System {
         self.pending_reg.clear();
         self.memory_system = Memory::new(4, &capacities, &latencies);
         self.registers = RegisterSet::new();
-        self.fetch = None;
+        self.fetch = FetchState::default();
         self.decode = PipelineStageStatus::Noop;
         self.execute = PipelineStageStatus::Noop;
         self.memory = PipelineStageStatus::Noop;
@@ -155,7 +161,7 @@ impl System {
             width: MemType::Unsigned32,
         });
         // need to store this across calls, otherwise we can block
-        let raw_instr = if let Some(raw) = self.fetch {
+        let raw_instr = if let Some(raw) = self.fetch.raw_instr {
             raw
         } else {
             let raw_resp = self.memory_system.request(&req);
@@ -164,7 +170,7 @@ impl System {
                     .get_contents(self.registers.program_counter as usize)
                     .unwrap();
                 if let Some(raw) = block_data.get_unsigned() {
-                    self.fetch = Some(raw);
+                    self.fetch.raw_instr = Some(raw);
                     raw
                 } else {
                     info!(
@@ -200,13 +206,13 @@ impl System {
                         let jump_addr = self.registers.general[RET_REG].data.force_unsigned();
                         info!("NoPipeline: Jump address of {jump_addr} taken from Register R{RET_REG}");
                         self.registers.program_counter = jump_addr;
-                        self.fetch = None;
+                        self.fetch = FetchState::default();
                         return SystemMessage::InstructionCompleted;
                     }
                     // HALT
                     1 => {
                         info!("NoPipeline: Halting");
-                        self.fetch = None;
+                        self.fetch = FetchState::default();
                         return SystemMessage::Halt;
                     }
                     _ => {
@@ -224,7 +230,7 @@ impl System {
                             data: MemBlock::Unsigned32(self.registers.program_counter),
                         };
                         self.registers.program_counter = immediate;
-                        self.fetch = None;
+                        self.fetch = FetchState::default();
                         return SystemMessage::InstructionCompleted;
                     }
                     // JE
@@ -233,7 +239,7 @@ impl System {
                         if self.registers.status.get(FlagIndex::EQ as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter = immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -245,7 +251,7 @@ impl System {
                         if !self.registers.status.get(FlagIndex::EQ as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter = immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -257,7 +263,7 @@ impl System {
                         if self.registers.status.get(FlagIndex::GT as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter = immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -269,7 +275,7 @@ impl System {
                         if self.registers.status.get(FlagIndex::LT as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter = immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -283,7 +289,7 @@ impl System {
                         {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter = immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -297,7 +303,7 @@ impl System {
                         {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter = immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -311,7 +317,7 @@ impl System {
                         if self.registers.status.get(FlagIndex::EQ as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter += immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -323,7 +329,7 @@ impl System {
                         if !self.registers.status.get(FlagIndex::EQ as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter += immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -335,7 +341,7 @@ impl System {
                         if self.registers.status.get(FlagIndex::GT as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter += immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -347,7 +353,7 @@ impl System {
                         if self.registers.status.get(FlagIndex::LT as usize) {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter += immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -361,7 +367,7 @@ impl System {
                         {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter += immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -375,7 +381,7 @@ impl System {
                         {
                             info!("NoPipeline: Jumping");
                             self.registers.program_counter += immediate;
-                            self.fetch = None;
+                            self.fetch = FetchState::default();
                             return SystemMessage::InstructionCompleted;
                         } else {
                             info!("NoPipeline: Not jumping");
@@ -1004,7 +1010,7 @@ impl System {
         // subsystem) should return out of the function *early* to avoid skipping
         // to the next instruction
         self.registers.step_pc();
-        self.fetch = None;
+        self.fetch = FetchState::default();
         SystemMessage::InstructionCompleted
     }
 
@@ -1019,12 +1025,13 @@ impl System {
             "Pipeline::Fetch: In fetch stage, current PC: {}, current instruction: {:?}",
             self.registers.program_counter, self.fetch
         );
-        match (self.fetch, decode_blocked) {
+        match (self.fetch.raw_instr, decode_blocked) {
             (None, _) => {
                 // If no current instruction, send load to cache with PC as address
+                let fetch_addr = self.registers.program_counter as usize;
                 let req = MemRequest::Load(LoadRequest {
                     issuer: PipelineStage::Fetch,
-                    address: self.registers.program_counter as usize,
+                    address: fetch_addr,
                     width: MemType::Unsigned32,
                 });
                 info!(
@@ -1072,6 +1079,7 @@ impl System {
                             };
 
                             let decoded = PipelineStageStatus::Instruction(PipelineInstruction {
+                                src_addr: Some(fetch_addr),
                                 raw_instr: Some(raw),
                                 decode_instr: None,
                                 instr_result: PipelineInstructionResult::Empty,
@@ -1107,7 +1115,8 @@ impl System {
                     instr
                 );
                 PipelineStageStatus::Instruction(PipelineInstruction {
-                    raw_instr: self.fetch,
+                    raw_instr: self.fetch.raw_instr,
+                    src_addr: self.fetch.src_addr,
                     decode_instr: None,
                     instr_result: PipelineInstructionResult::Empty,
                 })
@@ -1896,6 +1905,42 @@ impl System {
     pub fn toggle_pipeline(&mut self) {
         self.should_use_pipeline = !self.should_use_pipeline;
     }
+
+    pub fn get_display_instr_addr(&self) -> Option<usize> {
+        if let PipelineStageStatus::Instruction(PipelineInstruction {
+            src_addr: Some(src_addr),
+            ..
+        }) = self.writeback
+        {
+            Some(src_addr)
+        } else if let PipelineStageStatus::Instruction(PipelineInstruction {
+            src_addr: Some(src_addr),
+            ..
+        }) = self.execute
+        {
+            Some(src_addr)
+        } else if let PipelineStageStatus::Instruction(PipelineInstruction {
+            src_addr: Some(src_addr),
+            ..
+        }) = self.memory
+        {
+            Some(src_addr)
+        } else if let PipelineStageStatus::Instruction(PipelineInstruction {
+            src_addr: Some(src_addr),
+            ..
+        }) = self.decode
+        {
+            Some(src_addr)
+        } else if let FetchState {
+            src_addr: Some(src_addr),
+            ..
+        } = self.fetch
+        {
+            Some(src_addr)
+        } else {
+            None
+        }
+    }
 }
 
 /// A common object to be passed between pipeline stages
@@ -1910,6 +1955,7 @@ pub enum PipelineStageStatus {
 /// Stores instruction results to pass between pipeline stages
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct PipelineInstruction {
+    src_addr: Option<usize>,           // address the instruction was fetched from
     raw_instr: Option<RawInstruction>, // the instruction as stored in memory
     decode_instr: Option<Instruction>, // the decoded instruction
     instr_result: PipelineInstructionResult, // the result of executing this instruction
