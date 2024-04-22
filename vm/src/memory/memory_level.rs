@@ -55,15 +55,22 @@ impl MemoryLevel {
         }
     }
 
-    // for testing/ debugging, get rid of later (TODO:)
+    // for testing/ debugging
     pub fn force_store(&mut self, address: usize, data: MemBlock) {
         let idx = self.address_index(address);
         if let Err(e) = self.contents[idx].write(address, data) {
             error!(
-                "force_store: write to {address} with {:?} failed -- Error {e}",
+                "force_store: write to {address} with {:?} failed -- error {e}",
                 data
             );
         }
+    }
+
+    // for testing/ debugging
+    pub fn force_load(&self, address: usize) -> Option<MemBlock> {
+        let idx = self.address_index(address);
+        let conts = &self.contents[idx];
+        conts.get_contents(address)
     }
 
     /// Issues a new load request, or checks the status of an existing (matching)

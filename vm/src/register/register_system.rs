@@ -13,6 +13,33 @@ pub const FLOAT_REG_COUNT: usize = 16;
 pub const FLAG_COUNT: usize = 6;
 pub const RET_REG: usize = GEN_REG_COUNT - 1;
 
+// TODO: Maybe refactor this so we load it into a hashmap in the assembler?
+pub const TYPE_0_INSTRS: &[&str] = &["RET", "HALT"];
+pub const TYPE_1_INSTRS: &[&str] = &[
+    "CALL", "JE", "JNE", "JGT", "JLT", "JGTE", "JLTE", "IJE", "IJNE", "IJGT", "IJLT", "IJGTE",
+    "IJLTE",
+];
+pub const TYPE_2_INSTRS: &[&str] = &["CMP8", "CMP16", "CMP32", "LDIN8", "LDIN16", "LDIN32"];
+pub const TYPE_3_INSTRS: &[&str] = &["CMPF"];
+pub const TYPE_4_INSTRS: &[&str] = &[
+    "LD8", "LD16", "LD32", "LDI8", "LDI16", "LDI32", "ST8", "ST16", "ST32", "ADDIM",
+];
+pub const TYPE_5_INSTRS: &[&str] = &[
+    "ADDI", "SUBI", "MULI", "DIVI", "MODI", "RBSI", "XORI", "ANDI", "ORI", "ADDU", "SUBU", "MULU",
+    "DIVU", "MODU",
+];
+pub const TYPE_6_INSTRS: &[&str] = &["ADDF", "SUBF", "MULF", "DIVF"];
+
+pub const ALL_INSTR_TYPES: &[&[&str]] = &[
+    TYPE_0_INSTRS,
+    TYPE_1_INSTRS,
+    TYPE_2_INSTRS,
+    TYPE_3_INSTRS,
+    TYPE_4_INSTRS,
+    TYPE_5_INSTRS,
+    TYPE_6_INSTRS,
+];
+
 #[derive(Debug, Clone, Copy, Display, EnumString, EnumIter, PartialEq, Eq, Hash)]
 pub enum RegisterGroup {
     General = 0,

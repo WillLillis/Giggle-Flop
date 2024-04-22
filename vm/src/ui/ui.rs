@@ -3,14 +3,19 @@ use iced::widget::{button, checkbox, pane_grid, Button, Column, PaneGrid, Text};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
 use iced::{Alignment, Color, Command, Element, Length, Subscription, Theme};
 use log::info;
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;
 
+use crate::instruction::instruction::{decode_raw_instr, Instruction};
+use crate::memory::memory_system::MEM_BLOCK_WIDTH;
 use crate::register::register_system::RegisterGroup;
 use crate::system::system::{System, SystemMessage};
+
+use anyhow::Result;
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 
@@ -32,8 +37,8 @@ struct GiggleFlopUI {
     panes: pane_grid::State<Pane>,
     focus: Option<pane_grid::Pane>,
     use_pipeline: bool,
-    instr_lines: Vec<Line>,
-    program_counter: u32,
+    program_counter: u32, // TODO: Remove, just a duplicate of system.registers.program_counter
+    breakpoints: HashSet<u32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -44,10 +49,9 @@ enum Message {
     AdvanceClock,
     RunProgram,
     AdvanceInstruction,
-    SetBreakpoint,
     UsePipeline(bool),
     LoadProgram,
-    LineClicked(usize),
+    LineClicked(u32),
     // maybe delete
     Clicked(pane_grid::Pane),
     Resized(pane_grid::ResizeEvent),
@@ -108,8 +112,8 @@ impl GiggleFlopUI {
             focus: None,
             system,
             use_pipeline: true,
-            instr_lines: instr_obj,
             program_counter,
+            breakpoints: HashSet::new(),
         }
     }
 
@@ -117,76 +121,66 @@ impl GiggleFlopUI {
         match message {
             Message::Scrolled(viewport) => {
                 self.current_scroll_offset = viewport.relative_offset();
-
-                Command::none()
             }
             Message::SelectMemoryLevel(level) => {
                 if level < self.system.memory_system.num_levels() {
                     self.current_memory_level = level;
                 }
-                Command::none()
             }
             Message::SelectRegisterGroup(group) => {
                 self.current_register_group = group;
-                Command::none()
             }
             Message::AdvanceClock => {
+                // TODO: Why????
                 self.program_counter = self.system.registers.program_counter;
-                //println!("program counter: {}", self.program_counter);
-                // TODO: Clean this up?
-                for line in &mut self.instr_lines {
-                    line.is_green = line.number == (self.program_counter / 32 + 1) as usize;
-                }
-                // TODO: Need to handle halts here...
                 if let SystemMessage::Halt = self.system.step() {
                     info!("Got halt message");
                     self.run = false;
                 }
-                Command::none()
+                if self
+                    .breakpoints
+                    .contains(&self.system.registers.program_counter)
+                {
+                    info!(
+                        "Hit breakpoint at address 0x{:08X}",
+                        self.system.registers.program_counter
+                    );
+                    self.run = false;
+                }
             }
             Message::RunProgram => {
                 self.run = !self.run;
-                Command::none()
             }
             Message::AdvanceInstruction => {
                 // TODO: this
                 // does this need to be a thing?
-                Command::none()
-            }
-            Message::SetBreakpoint => {
-                // TODO: this
-                Command::none()
             }
             Message::UsePipeline(val) => {
                 // TODO: this
                 self.system.reset();
                 self.use_pipeline = val;
-                Command::none()
             }
             Message::LoadProgram => {
                 // TODO: Fill in later...
                 self.system.reset();
                 self.system.load_program();
-                Command::none()
             }
-            Message::LineClicked(line_num) => {
-                if let Some(instr) = self.instr_lines.get_mut(line_num - 1) {
-                    instr.is_red = !instr.is_red;
+            Message::LineClicked(addr) => {
+                if !self.breakpoints.remove(&addr) {
+                    self.breakpoints.insert(addr);
                 }
-                Command::none()
             }
             Message::Clicked(pane) => {
                 self.focus = Some(pane);
-                Command::none()
             }
             Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(split, ratio);
-                Command::none()
             }
         }
+        Command::none()
     }
 
-    fn get_instructions_from_file() -> Result<Vec<String>, std::io::Error> {
+    fn get_instructions_from_file() -> Result<Vec<String>> {
         let program_file = "demo.gf";
         info!("Loading instruction file {program_file}");
         let f = File::open(program_file).expect("Unable to open instruction file");
@@ -216,11 +210,6 @@ impl GiggleFlopUI {
                     .padding(10)
                     .on_press(Message::LoadProgram)
             };
-            let break_button = || {
-                button("Set breakpoint")
-                    .padding(10)
-                    .on_press(Message::SetBreakpoint)
-            };
             let skip_instruction_button = || {
                 button("Skip instruction")
                     .padding(10)
@@ -237,7 +226,6 @@ impl GiggleFlopUI {
                     step_button(),
                     run_button(),
                     load_button(),
-                    break_button(),
                     skip_instruction_button(),
                     pipeline_checkbox(),
                 ]
@@ -377,26 +365,41 @@ impl GiggleFlopUI {
     }
 
     fn get_instruction_element(&self) -> Element<Message> {
+        // TODO: Need to add in address to label functionality
+        // first collect raw instructions 10 behind and 10 ahead of current program counter
+        let curr_pc = self.system.registers.program_counter as usize;
+        let lookahead = MEM_BLOCK_WIDTH * 10;
+        let raw_instrs: Vec<(usize, Option<Instruction>)> = (curr_pc.saturating_sub(lookahead)
+            ..curr_pc.saturating_add(lookahead))
+            .step_by(MEM_BLOCK_WIDTH)
+            .into_iter()
+            .map(|addr| (addr, self.system.memory_system.force_instr_load(addr)))
+            .map(|(addr, raw_instr)| (addr, decode_raw_instr(raw_instr)))
+            .collect();
+
         let mut column = Column::new();
-        for instr in &self.instr_lines {
-            let text = Text::new(format!("{}: {}", instr.number, instr.instr));
-            let text = if instr.is_green {
-                text.color(Color::from_rgb(0.0, 1.0, 0.0))
+        for (addr, decoded_instr) in raw_instrs {
+            let mut text = if let Some(instr) = decoded_instr {
+                Text::new(format!("0x{addr:08X}: {}", instr))
             } else {
-                text
+                Text::new(format!("0x{addr:08X}: INVALID INSTRUCTION"))
             };
-            let text = if instr.is_red {
-                text.color(Color::from_rgb(1.0, 0.0, 0.0))
-            } else {
-                text
-            };
+
+            if addr == usize::try_from(self.system.registers.program_counter).unwrap() {
+                text = text.color(Color::from_rgb(0.0, 1.0, 0.0));
+            }
+
             let button = Button::new(text)
-                .on_press(Message::LineClicked(instr.number))
-                .style(style::btn)
-                // TODO: add style here to remove background?
+                .on_press(Message::LineClicked(addr as u32))
+                .style(if self.breakpoints.contains(&(addr as u32)) {
+                    style::breakpoint_button
+                } else {
+                    style::regular_button
+                })
                 .padding(0);
             column = column.push(button);
         }
+
         let scrollable_content: Element<Message> = Element::from({
             Scrollable::with_direction(
                 row![column // padding
@@ -530,6 +533,8 @@ impl GiggleFlopUI {
     }
 
     fn subscription(&self) -> Subscription<Message> {
+        // need to clean this up to work with breakpoints, seems to be wait time dependent
+        // currently (stops late)
         if self.run {
             // NOTE: 1ms is fairly arbitrary. Too fast (e.g. 1ns) and the UI becomes unresponsive though
             iced::time::every(std::time::Duration::from_millis(1)).map(|_| Message::AdvanceClock)
@@ -584,9 +589,22 @@ mod style {
         }
     }
 
-    pub fn btn(_theme: &Theme, _status: Status) -> button::Style {
+    pub fn regular_button(_theme: &Theme, _status: Status) -> button::Style {
         button::Style {
             background: None,
+            text_color: Color::WHITE,
+            border: Border {
+                color: Color::WHITE,
+                width: 0.0,
+                radius: Radius::from(0.0),
+            },
+            shadow: Shadow::default(),
+        }
+    }
+
+    pub fn breakpoint_button(_theme: &Theme, _status: Status) -> button::Style {
+        button::Style {
+            background: Some(iced::Background::Color(Color::from_rgb(1.0, 0.0, 0.0))),
             text_color: Color::WHITE,
             border: Border {
                 color: Color::WHITE,

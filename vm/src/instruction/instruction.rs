@@ -1,8 +1,13 @@
+use std::fmt::Display;
+
 use log::{error, info};
 
 use crate::{
     memory::memory_system::{LoadRequest, MemRequest, MemType},
-    register::register_system::{Register, RegisterGroup, RegisterSet, RET_REG},
+    register::register_system::{
+        Register, RegisterGroup, RegisterSet, ALL_INSTR_TYPES, RET_REG, TYPE_0_INSTRS,
+        TYPE_1_INSTRS, TYPE_2_INSTRS, TYPE_3_INSTRS, TYPE_4_INSTRS,
+    },
     system::system::PipelineStage,
 };
 
@@ -179,6 +184,111 @@ impl Instruction {
                 ]
             }
         }
+    }
+}
+
+impl Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Instruction::Type0 { opcode } => {
+                write!(
+                    f,
+                    "{}",
+                    TYPE_0_INSTRS
+                        .get(*opcode as usize)
+                        .unwrap_or(&"INVALID INSTRUCTION")
+                )?;
+            }
+            Instruction::Type1 { opcode, immediate } => {
+                write!(
+                    f,
+                    "{} 0x{immediate:08x}",
+                    TYPE_1_INSTRS
+                        .get(*opcode as usize)
+                        .unwrap_or(&"INVALID INSTRUCTION"),
+                )?;
+            }
+            Instruction::Type2 {
+                opcode,
+                reg_1,
+                reg_2,
+            } => {
+                write!(
+                    f,
+                    "{} R{}, R{}",
+                    TYPE_2_INSTRS
+                        .get(*opcode as usize)
+                        .unwrap_or(&"INVALID INSTRUCTION"),
+                    reg_1,
+                    reg_2,
+                )?;
+            }
+            Instruction::Type3 {
+                opcode,
+                freg_1,
+                freg_2,
+            } => {
+                write!(
+                    f,
+                    "{} F{}, F{}",
+                    TYPE_3_INSTRS
+                        .get(*opcode as usize)
+                        .unwrap_or(&"INVALID INSTRUCTION"),
+                    freg_1,
+                    freg_2,
+                )?;
+            }
+            Instruction::Type4 {
+                opcode,
+                reg_1,
+                immediate,
+            } => {
+                write!(
+                    f,
+                    "{} R{}, 0x{:08X}",
+                    TYPE_4_INSTRS
+                        .get(*opcode as usize)
+                        .unwrap_or(&"INVALID INSTRUCTION"),
+                    reg_1,
+                    immediate,
+                )?;
+            }
+            Instruction::Type5 {
+                opcode,
+                reg_1,
+                reg_2,
+                reg_3,
+            } => {
+                write!(
+                    f,
+                    "{} R{}, R{}, R{}",
+                    TYPE_4_INSTRS
+                        .get(*opcode as usize)
+                        .unwrap_or(&"INVALID INSTRUCTION"),
+                    reg_1,
+                    reg_2,
+                    reg_3
+                )?;
+            }
+            Instruction::Type6 {
+                opcode,
+                freg_1,
+                freg_2,
+                freg_3,
+            } => {
+                write!(
+                    f,
+                    "{} F{}, F{}, F{}",
+                    TYPE_4_INSTRS
+                        .get(*opcode as usize)
+                        .unwrap_or(&"INVALID INSTRUCTION"),
+                    freg_1,
+                    freg_2,
+                    freg_3
+                )?;
+            }
+        }
+        Ok(())
     }
 }
 

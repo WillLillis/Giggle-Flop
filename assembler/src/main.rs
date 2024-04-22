@@ -12,6 +12,8 @@ use regex::{Captures, Regex};
 
 use giggle_flop::instruction::instruction::Instruction;
 
+use giggle_flop::register::register_system::{FLOAT_REG_COUNT, GEN_REG_COUNT, ALL_INSTR_TYPES};
+
 // TODO: Look into adding a .DATA directive...
 // TODO: Writing to disk...
 
@@ -22,36 +24,7 @@ const DEFAULT_OUTPUT_PATH: &str = "a";
 const LINE_COMMENT_REGEX: &str = r"//(\\+(.|\r?\n)|[^\\\n])*";
 const LABEL_REGEX: &str = r"^\s*[a-zA-Z][\w]+:";
 
-const NUM_GEN_REGS: usize = 16;
-const NUM_FLOAT_REGS: usize = 16;
 const MAX_IMMEDIATE_VAL: u32 = 2u32.pow(21);
-
-// TODO: Maybe refactor this so we load it into a hashmap?
-const TYPE_0_INSTRS: &[&str] = &["RET", "HALT"];
-const TYPE_1_INSTRS: &[&str] = &[
-    "CALL", "JE", "JNE", "JGT", "JLT", "JGTE", "JLTE", "IJE", "IJNE", "IJGT", "IJLT", "IJGTE",
-    "IJLTE",
-];
-const TYPE_2_INSTRS: &[&str] = &["CMP8", "CMP16", "CMP32", "LDIN8", "LDIN16", "LDIN32"];
-const TYPE_3_INSTRS: &[&str] = &["CMPF"];
-const TYPE_4_INSTRS: &[&str] = &[
-    "LD8", "LD16", "LD32", "LDI8", "LDI16", "LDI32", "ST8", "ST16", "ST32", "ADDIM",
-];
-const TYPE_5_INSTRS: &[&str] = &[
-    "ADDI", "SUBI", "MULI", "DIVI", "MODI", "RBSI", "XORI", "ANDI", "ORI", "ADDU", "SUBU", "MULU",
-    "DIVU", "MODU",
-];
-const TYPE_6_INSTRS: &[&str] = &["ADDF", "SUBF", "MULF", "DIVF"];
-
-const ALL_INSTR_TYPES: &[&[&str]] = &[
-    TYPE_0_INSTRS,
-    TYPE_1_INSTRS,
-    TYPE_2_INSTRS,
-    TYPE_3_INSTRS,
-    TYPE_4_INSTRS,
-    TYPE_5_INSTRS,
-    TYPE_6_INSTRS,
-];
 
 const INSTR_TYPE_0_REGEX: &str = r"(?P<opcode>[a-zA-Z]+)";
 const INSTR_TYPE_1_REGEX: &str =
@@ -327,13 +300,13 @@ fn parse_reg(
         };
         match reg_group {
             RegisterGroup::General => {
-                if !(0..NUM_GEN_REGS).contains(&parsed_reg) {
-                    return Err(anyhow!("Line {line_num}: Invalid register number {parsed_reg}. Valid range is [0-{NUM_GEN_REGS})"));
+                if !(0..GEN_REG_COUNT).contains(&parsed_reg) {
+                    return Err(anyhow!("Line {line_num}: Invalid register number {parsed_reg}. Valid range is [0-{GEN_REG_COUNT})"));
                 }
             }
             RegisterGroup::FloatingPoint => {
-                if !(0..NUM_FLOAT_REGS).contains(&parsed_reg) {
-                    return Err(anyhow!("Line {line_num}: Invalid register number {parsed_reg}. Valid range is [0-{NUM_FLOAT_REGS})"));
+                if !(0..FLOAT_REG_COUNT).contains(&parsed_reg) {
+                    return Err(anyhow!("Line {line_num}: Invalid register number {parsed_reg}. Valid range is [0-{FLOAT_REG_COUNT})"));
                 }
             }
         }

@@ -421,4 +421,14 @@ impl Memory {
             }
         }
     }
+
+    pub fn force_instr_load(&self, addr: usize) -> u32 {
+        let resp = self.levels.last().unwrap().force_load(addr);
+        if let Some(block) = resp {
+            if let Some(raw) = block.get_unsigned() {
+                return raw;
+            }
+        }
+        u32::MAX
+    }
 }

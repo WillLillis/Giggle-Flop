@@ -84,8 +84,7 @@ impl System {
             clock: 0,
             pending_reg: HashSet::new(),
             memory_system: Memory::new(4, &[32, 256], &[1, 2]),
-            //should_use_pipeline: true,
-            should_use_pipeline: false,
+            should_use_pipeline: true,
             registers: RegisterSet::new(),
             fetch: None,
             decode: PipelineStageStatus::Noop,
@@ -1614,15 +1613,6 @@ impl System {
             }
         }
 
-        // BUG: Look here for blocked issue?
-        // Don't need to check if we're blocked here by pending registers?
-        // if memory blocked, return Noop/Stall
-        // if mem_blocked {
-        //     info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}");
-        //     self.pipeline_decode(mem_blocked);
-        //
-        // } else {
-        // if memory not blocked, return instruction object with result to memory
         if mem_blocked {
             //info!("Pipeline::Execute: Returning Stall"); // try returning a NOOP if memory is
             // stalled instead?
@@ -1893,7 +1883,7 @@ impl System {
         msg
     }
 
-    // TODO: do this
+    // TODO: do this???
     pub fn skip_instruction(&mut self) {
         info!("Starting an instruction step");
         todo!()
