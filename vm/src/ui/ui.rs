@@ -1,7 +1,8 @@
 use iced::widget::scrollable::Properties;
 use iced::widget::{button, checkbox, pane_grid, Button, Column, PaneGrid, Text};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
-use iced::{Alignment, Color, Command, Element, Length, Subscription, Theme};
+use iced::window::{self, Mode};
+use iced::{Alignment, Color, Command, Element, Length, Theme};
 use log::info;
 use std::collections::HashSet;
 use std::fs::File;
@@ -21,7 +22,7 @@ static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 
 pub fn enter() -> iced::Result {
     iced::program("Giggle-Flop", GiggleFlopUI::update, GiggleFlopUI::view)
-        .subscription(GiggleFlopUI::subscription)
+        .load(|| window::change_mode(window::Id::MAIN, Mode::Fullscreen))
         .theme(GiggleFlopUI::theme)
         .run()
 }
@@ -37,7 +38,6 @@ struct GiggleFlopUI {
     panes: pane_grid::State<Pane>,
     focus: Option<pane_grid::Pane>,
     use_pipeline: bool,
-    program_counter: u32, // TODO: Remove, just a duplicate of system.registers.program_counter
     breakpoints: HashSet<u32>,
 }
 
@@ -79,7 +79,6 @@ impl GiggleFlopUI {
             }
             groups
         };
-        let program_counter = system.registers.program_counter;
         let (panes, _) = pane_grid::State::new(Pane::new());
 
         // Create these by reading from memory?
@@ -94,7 +93,6 @@ impl GiggleFlopUI {
             focus: None,
             system,
             use_pipeline: true,
-            program_counter,
             breakpoints: HashSet::new(),
         }
     }
@@ -113,25 +111,53 @@ impl GiggleFlopUI {
                 self.current_register_group = group;
             }
             Message::AdvanceClock => {
-                // TODO: Why????
-                self.program_counter = self.system.registers.program_counter;
-                if let SystemMessage::Halt = self.system.step() {
-                    info!("Got halt message");
-                    self.run = false;
-                }
-                if self
-                    .breakpoints
-                    .contains(&self.system.registers.program_counter)
-                {
-                    info!(
-                        "Hit breakpoint at address 0x{:08X}",
+                let mut cont = true;
+                while cont {
+                    if let SystemMessage::Halt = self.system.step() {
+                        info!("Got halt message");
+                        self.run = false;
+                    }
+                    let effective_pc = if let Some(addr) = self.system.get_display_instr_addr() {
+                        u32::try_from(addr).unwrap()
+                    } else {
                         self.system.registers.program_counter
-                    );
-                    self.run = false;
+                    };
+
+                    if self.breakpoints.contains(&effective_pc) {
+                        info!(
+                            "Hit breakpoint at address 0x{:08X}",
+                            self.system.registers.program_counter
+                        );
+                        self.run = false;
+                    }
+
+                    cont = self.run;
                 }
             }
             Message::RunProgram => {
                 self.run = !self.run;
+                let mut cont = true;
+                while cont {
+                    if let SystemMessage::Halt = self.system.step() {
+                        info!("Got halt message");
+                        self.run = false;
+                    }
+                    let effective_pc = if let Some(addr) = self.system.get_display_instr_addr() {
+                        u32::try_from(addr).unwrap()
+                    } else {
+                        self.system.registers.program_counter
+                    };
+
+                    if self.breakpoints.contains(&effective_pc) {
+                        info!(
+                            "Hit breakpoint at address 0x{:08X}",
+                            self.system.registers.program_counter
+                        );
+                        self.run = false;
+                    }
+
+                    cont = self.run;
+                }
             }
             Message::AdvanceInstruction => {
                 // TODO: this
@@ -384,8 +410,7 @@ impl GiggleFlopUI {
                 })
                 .padding(0);
             column = column.push(button);
-            //
-            // TODO: Fix overshoot here by checking for HALT in string?
+            // TODO: Find a cleaner way to solve this problem
             if is_halt {
                 break;
             }
@@ -519,17 +544,6 @@ impl GiggleFlopUI {
         ]
         .height(Length::Fill)
         .into()
-    }
-
-    fn subscription(&self) -> Subscription<Message> {
-        // need to clean this up to work with breakpoints, seems to be wait time dependent
-        // currently (stops late)
-        if self.run {
-            // NOTE: 1ms is fairly arbitrary. Too fast (e.g. 1ns) and the UI becomes unresponsive though
-            iced::time::every(std::time::Duration::from_millis(1)).map(|_| Message::AdvanceClock)
-        } else {
-            Subscription::none()
-        }
     }
 
     #[allow(clippy::unused_self)]

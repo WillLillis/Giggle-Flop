@@ -121,7 +121,7 @@ impl System {
         self.writeback = PipelineStageStatus::Noop;
     }
 
-    // TODO: Improve this idk
+    // TODO: Improve this by utilizing the drop file event
     pub fn load_program(&mut self) {
         let program_file = "demo_bin";
         info!("Loading program file {program_file}");
@@ -1186,8 +1186,6 @@ impl System {
                 // BUG: Later stages incorrectly get stuck in blocked state, we ignore every
                 // instruction coming out of fetch...
                 self.pipeline_fetch(true); // shouldn't get anything back because we're blocked...
-                                           //info!("Pipeline::Decode: Passing on a Stall status");
-                                           //PipelineStageStatus::Stall
                 info!("Pipeline::Decode: Passing on a Noop status");
                 PipelineStageStatus::Noop
             }
@@ -1222,8 +1220,6 @@ impl System {
                         self.pending_reg.insert(reg);
                     }
                 }
-                // BUG: Issue is here???
-                // try out swapping stalls with a noop (Chip said stalls don't propogate?)
                 info!(
                     "Pipeline::Decode: Returning decoded instruction {:?} to execute",
                     completed_instr
@@ -1678,7 +1674,6 @@ impl System {
                                 // if not blocked, return instruction with result
                                 // if blocked, return Noop/ Stall
                                 info!("Pipeline::Memory: Calling execute with memory blocked");
-                                // BUG: Make sure this doesn't return anything? (besides a noop)
                                 self.pipeline_execute(true);
                                 info!("Pipeline::Memory: Returning stall status to writeback");
                                 PipelineStageStatus::Stall
@@ -1856,8 +1851,6 @@ impl System {
             }
         }
 
-        // if we have a Halt instr, we need to pass that message back to the system
-
         // call M
         //  - Save instr returned from M for next cycle
         let finished_instr = self.writeback;
@@ -1866,14 +1859,19 @@ impl System {
         info!(
             "Pipeline::Writeback: Saving message returned from memory stage: {:?}",
             self.writeback
+
         );
+        // if we have a Halt instr, we need to pass that message back to the system
         if let PipelineStageStatus::Instruction(PipelineInstruction {
             decode_instr: Some(Instruction::Type0 { opcode: 1 }),
             ..
         }) = finished_instr
         {
+            info!("Passing Halt message");
+            info!("LOOKHERE: HALT");
             SystemMessage::Halt
         } else {
+            info!("LOOKHERE: {:?}", finished_instr);
             SystemMessage::InstructionCompleted
         }
     }
@@ -1947,7 +1945,6 @@ impl System {
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum PipelineStageStatus {
     Instruction(PipelineInstruction),
-    //Block, // NOTE: Starting to fix things...
     Stall,
     Noop,
 }

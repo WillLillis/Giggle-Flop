@@ -343,7 +343,7 @@ impl MemBlock {
 
 impl Default for MemBlock {
     fn default() -> Self {
-        Self::Unsigned8(0u8)
+        Self::Unsigned32(u32::MAX)
     }
 }
 
