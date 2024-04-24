@@ -172,11 +172,9 @@ impl RegisterSet {
         }
     }
 
-    // NOTE: Use this once we have the pipeline fixed?
-    #[allow(dead_code)]
-    pub fn write_status(&mut self, idx: FlagIndex, data: bool) {
+    pub fn write_status(&mut self, idx: usize, data: bool) {
         info!("Setting status flag {idx} to {data}");
-        self.status.set(idx as usize, data);
+        self.status.set(idx, data);
     }
 }
 

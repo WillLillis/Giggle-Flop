@@ -1263,7 +1263,6 @@ impl System {
                             match opcode {
                                 // RET
                                 0 => {
-                                    // panic!("Got here at least");
                                     info!("RET instruction, setting branch result");
                                     let addr =
                                         self.registers.general[RET_REG].data.force_unsigned();
@@ -1290,17 +1289,158 @@ impl System {
                                         };
                                 }
                                 // Branch immediate
-                                1..=6 => {
-                                    info!("Branch immediate instruction, setting branch result");
+                                // JE
+                                1 => {
                                     instr.instr_result =
-                                        PipelineInstructionResult::Branch { new_pc: *immediate };
+                                        if self.registers.status.get(FlagIndex::EQ as usize) {
+                                            info!("JE Instruction...EQ flag is set");
+                                            PipelineInstructionResult::Branch { new_pc: *immediate }
+                                        } else {
+                                            info!("JE Instruction...EQ flag is not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // JNE
+                                2 => {
+                                    instr.instr_result =
+                                        if !self.registers.status.get(FlagIndex::EQ as usize) {
+                                            info!("JNE Instruction...EQ flag is not set");
+                                            PipelineInstructionResult::Branch { new_pc: *immediate }
+                                        } else {
+                                            info!("JNE Instruction...EQ flag is set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // JGT
+                                3 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::GT as usize) {
+                                            info!("JNE Instruction...GT flag is set");
+                                            PipelineInstructionResult::Branch { new_pc: *immediate }
+                                        } else {
+                                            info!("JNE Instruction...GT flag is not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // JLT
+                                4 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::LT as usize) {
+                                            info!("JLE Instruction...LT flag is set");
+                                            PipelineInstructionResult::Branch { new_pc: *immediate }
+                                        } else {
+                                            info!("JLE Instruction...LT flag is not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // JGTE
+                                5 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::EQ as usize)
+                                            || self.registers.status.get(FlagIndex::GT as usize)
+                                        {
+                                            info!("JGTE Instruction...EQ or GT flag is set");
+                                            PipelineInstructionResult::Branch { new_pc: *immediate }
+                                        } else {
+                                            info!("JGTE Instruction...EQ and GT flag are not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // JLTE
+                                6 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::EQ as usize)
+                                            || self.registers.status.get(FlagIndex::LT as usize)
+                                        {
+                                            info!("JLTE Instruction...EQ or LT flag is set");
+                                            PipelineInstructionResult::Branch { new_pc: *immediate }
+                                        } else {
+                                            info!("JLTE Instruction...EQ and LT flag are not set");
+                                            PipelineInstructionResult::Empty
+                                        }
                                 }
                                 // Branch indirect
-                                7..=12 => {
-                                    info!("Pipeline::Execute: Branch indirect instruction, setting branch result");
-                                    instr.instr_result = PipelineInstructionResult::Branch {
-                                        new_pc: src_addr + *immediate,
-                                    };
+                                // IJE
+                                7 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::EQ as usize) {
+                                            info!("JE Instruction...EQ flag is set");
+                                            PipelineInstructionResult::Branch {
+                                                new_pc: src_addr + *immediate,
+                                            }
+                                        } else {
+                                            info!("JE Instruction...EQ flag is not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // IJNE
+                                8 => {
+                                    instr.instr_result =
+                                        if !self.registers.status.get(FlagIndex::EQ as usize) {
+                                            info!("JNE Instruction...EQ flag is not set");
+                                            PipelineInstructionResult::Branch {
+                                                new_pc: src_addr + *immediate,
+                                            }
+                                        } else {
+                                            info!("JNE Instruction...EQ flag is set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // IJGT
+                                9 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::GT as usize) {
+                                            info!("JNE Instruction...GT flag is set");
+                                            PipelineInstructionResult::Branch {
+                                                new_pc: src_addr + *immediate,
+                                            }
+                                        } else {
+                                            info!("JNE Instruction...GT flag is not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // IJLT
+                                10 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::LT as usize) {
+                                            info!("JLE Instruction...LT flag is set");
+                                            PipelineInstructionResult::Branch {
+                                                new_pc: src_addr + *immediate,
+                                            }
+                                        } else {
+                                            info!("JLE Instruction...LT flag is not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // IJGTE
+                                11 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::EQ as usize)
+                                            || self.registers.status.get(FlagIndex::GT as usize)
+                                        {
+                                            info!("JGTE Instruction...EQ or GT flag is set");
+                                            PipelineInstructionResult::Branch {
+                                                new_pc: src_addr + *immediate,
+                                            }
+                                        } else {
+                                            info!("JGTE Instruction...EQ and GT flag are not set");
+                                            PipelineInstructionResult::Empty
+                                        }
+                                }
+                                // IJLTE
+                                12 => {
+                                    instr.instr_result =
+                                        if self.registers.status.get(FlagIndex::EQ as usize)
+                                            || self.registers.status.get(FlagIndex::LT as usize)
+                                        {
+                                            info!("JLTE Instruction...EQ or LT flag is set");
+                                            PipelineInstructionResult::Branch {
+                                                new_pc: src_addr + *immediate,
+                                            }
+                                        } else {
+                                            info!("JLTE Instruction...EQ and LT flag are not set");
+                                            PipelineInstructionResult::Empty
+                                        }
                                 }
                                 _ => {
                                     info!("Pipeline::Execute: Other instruction, empty result");
@@ -1834,8 +1974,6 @@ impl System {
         }
     }
 
-    // TODO: Need to pop R15 out of pending registers here when we see a CALL instruction => That
-    // just has a branch result...
     fn pipeline_writeback(&mut self) -> SystemMessage {
         info!(
             "Pipeline::Writeback: Pipeline: In writeback stage, current instruction: {:?}",
@@ -1907,6 +2045,12 @@ impl System {
                             flags
                         );
                         // TODO: Handle this...
+                        for (idx, val) in flags.iter().enumerate() {
+                            if let Some(flag) = val {
+                                self.registers.write_status(idx, *flag)
+                            }
+                        }
+                        self.pending_reg.remove(&(RegisterGroup::General, 0));
                     }
                     PipelineInstructionResult::Empty => {
                         info!("Pipeline::Writeback: Instruction has empty result, doing nothing");
@@ -2038,6 +2182,7 @@ pub struct PipelineInstruction {
 }
 impl PipelineInstruction {
     /// Returns the target register group and number, if applicable
+    /// TODO: Add flag registers for comparisons...
     pub fn get_dest_reg(&self) -> Option<(RegisterGroup, usize)> {
         match self.decode_instr {
             Some(Instruction::Type1 { opcode, .. }) => {
@@ -2047,6 +2192,9 @@ impl PipelineInstruction {
                     None
                 }
             }
+            Some(Instruction::Type2 { opcode: 0..=2, .. } | Instruction::Type3 { .. }) => {
+                Some((RegisterGroup::Flag, 0))
+            }
             Some(
                 Instruction::Type2 {
                     opcode: 3..=5,
@@ -2055,10 +2203,7 @@ impl PipelineInstruction {
                 }
                 | Instruction::Type5 { reg_1, .. },
             ) => Some((RegisterGroup::General, reg_1)),
-            Some(
-                Instruction::Type0 { .. } | Instruction::Type2 { .. } | Instruction::Type3 { .. },
-            )
-            | None => None,
+            Some(Instruction::Type0 { .. } | Instruction::Type2 { .. }) | None => None,
             Some(Instruction::Type4 { opcode, reg_1, .. }) => match opcode {
                 0 | 1 | 2 | 3 | 4 | 5 | 9 => Some((RegisterGroup::General, reg_1)),
                 _ => None,
