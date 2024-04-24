@@ -143,6 +143,15 @@ impl Memory {
         mem
     }
 
+    /// Clears *ALL* request queues and pending results
+    /// Used along with a squash in the pipeline
+    pub fn clear_reqs(&mut self) {
+        for level in self.levels.iter_mut() {
+            level.curr_req = None;
+            level.reqs.clear();
+        }
+    }
+
     // for testing/ debugging, get rid of later (TODO:)
     /// Manually set the values of an individual address to main memory
     pub fn force_store(&mut self, address: usize, data: MemBlock) {

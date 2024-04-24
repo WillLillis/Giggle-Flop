@@ -426,7 +426,8 @@ impl GiggleFlopUI {
             let mut is_halt = false;
             let mut text = if let Some(instr) = decoded_instr {
                 let formatted = format!("0x{addr:08X}: {}", instr);
-                is_halt = formatted.contains("HALT");
+                // TODO: Come up with a better solution here...
+                // is_halt = formatted.contains("HALT");
                 Text::new(formatted)
             } else {
                 Text::new(format!("0x{addr:08X}: INVALID INSTRUCTION"))

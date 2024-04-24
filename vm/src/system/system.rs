@@ -123,7 +123,7 @@ impl System {
 
     // TODO: Improve this by utilizing the drop file event
     pub fn load_program(&mut self) {
-        let program_file = "demo_bin";
+        let program_file = "test_bin";
         info!("Loading program file {program_file}");
         let program = std::fs::read(program_file).unwrap();
         info!("Loaded: {:?}", program);
@@ -201,6 +201,7 @@ impl System {
             Instruction::Type0 { opcode } => {
                 info!("NoPipeline: Got Type 0 instruction, opcode: {opcode}");
                 match opcode {
+                    // destination registers go into pending
                     // RET
                     0 => {
                         let jump_addr = self.registers.general[RET_REG].data.force_unsigned();
@@ -226,6 +227,8 @@ impl System {
                     // CALL
                     0 => {
                         info!("NoPipeline: CALL instruction");
+                        self.pending_reg.insert((RegisterGroup::General, RET_REG));
+                        // TODO: Need to change over to one past current instruction
                         self.registers.general[RET_REG] = Register {
                             data: MemBlock::Unsigned32(self.registers.program_counter),
                         };
@@ -1146,6 +1149,7 @@ impl System {
                     // split instruction into fields
                     if let Some(instr) = decode_raw_instr(raw) {
                         let src_regs = instr.get_src_regs();
+                        println!("BOFFA: {:?}", src_regs);
                         pending_regs = src_regs.iter().any(|src| self.pending_reg.contains(src));
                         info!("Pipeline::Decode: Pending source registers: {pending_regs}");
                         if !pending_regs {
@@ -1229,6 +1233,7 @@ impl System {
         }
     }
 
+    // TODO: Fill in memory results here...
     #[allow(clippy::too_many_lines)] // TODO: Fix this later...
                                      // NOTE: Make sure to set flag status in result for all ALU ops...
     fn pipeline_execute(&mut self, mem_blocked: bool) -> PipelineStageStatus {
@@ -1236,18 +1241,72 @@ impl System {
             "Pipeline::Execute: In execute stage, current instruction: {:?}, memory blocked: {}",
             self.execute, mem_blocked
         );
+        // get current pc of execute instruction?
+        let src_addr = if let PipelineStageStatus::Instruction(PipelineInstruction {
+            src_addr: Some(src_addr),
+            ..
+        }) = self.execute
+        {
+            u32::try_from(src_addr).unwrap()
+        } else {
+            error!("Pipeline::Execute: Unable to find address for instruction ");
+            0
+        };
         // execute appears to pass along a more "filled in" instruction object, look into this...
         match self.execute {
             PipelineStageStatus::Instruction(ref mut instr) => {
                 info!("Pipeline::Execute: Have current instruction: {:?}", instr);
                 if let Some(ref mut instruction) = instr.decode_instr {
                     match instruction {
-                        Instruction::Type0 { .. } => {
-                            info!("Pipeline::Execute: No work to be done, empty result");
-                            instr.instr_result = PipelineInstructionResult::Empty;
+                        Instruction::Type0 { opcode } => {
+                            info!("Pipeline::Execute: Type 0 instruction");
+                            match opcode {
+                                // RET
+                                0 => {
+                                    // panic!("Got here at least");
+                                    info!("RET instruction, setting branch result");
+                                    let addr =
+                                        self.registers.general[RET_REG].data.force_unsigned();
+                                    instr.instr_result =
+                                        PipelineInstructionResult::Branch { new_pc: addr }
+                                }
+                                _ => {
+                                    info!("Other instruction, setting empty result");
+                                    instr.instr_result = PipelineInstructionResult::Empty;
+                                }
+                            }
                         }
-                        Instruction::Type1 { .. } => {
-                            info!("Pipeline::Execute: No work to be done, empty result");
+                        Instruction::Type1 { opcode, immediate } => {
+                            info!("Pipeline::Execute: Type 1 instruction");
+                            match opcode {
+                                // CALL
+                                0 => {
+                                    info!("CALL instruction, setting JSR result");
+                                    instr.instr_result =
+                                        PipelineInstructionResult::JumpSubRoutine {
+                                            new_pc: *immediate,
+                                            ret_reg_val: src_addr
+                                                + u32::try_from(MEM_BLOCK_WIDTH).unwrap(),
+                                        };
+                                }
+                                // Branch immediate
+                                1..=6 => {
+                                    info!("Branch immediate instruction, setting branch result");
+                                    instr.instr_result =
+                                        PipelineInstructionResult::Branch { new_pc: *immediate };
+                                }
+                                // Branch indirect
+                                7..=12 => {
+                                    info!("Pipeline::Execute: Branch indirect instruction, setting branch result");
+                                    instr.instr_result = PipelineInstructionResult::Branch {
+                                        new_pc: src_addr + *immediate,
+                                    };
+                                }
+                                _ => {
+                                    info!("Pipeline::Execute: Other instruction, empty result");
+                                    instr.instr_result = PipelineInstructionResult::Empty;
+                                }
+                            }
                         }
                         Instruction::Type2 {
                             opcode,
@@ -1678,6 +1737,7 @@ impl System {
                                 info!("Pipeline::Memory: Returning stall status to writeback");
                                 PipelineStageStatus::Stall
                             }
+                            // should this happen here?
                             Ok(MemResponse::StoreComplete) => {
                                 info!(
                                     "Pipeline::Memory: Store request returned StoreComplete status"
@@ -1774,6 +1834,8 @@ impl System {
         }
     }
 
+    // TODO: Need to pop R15 out of pending registers here when we see a CALL instruction => That
+    // just has a branch result...
     fn pipeline_writeback(&mut self) -> SystemMessage {
         info!(
             "Pipeline::Writeback: Pipeline: In writeback stage, current instruction: {:?}",
@@ -1812,8 +1874,14 @@ impl System {
                             "Pipeline::Writeback: Instruction has branch result. New PC: {}",
                             new_pc
                         );
+                        // need to write return address to R15 here in case of call, remove from
+                        // pending registers?
                         self.registers.program_counter = new_pc;
+                        info!("Pipeline::Writeback: Branch instruction, squashing the rest of the pipeline");
+                        // breaking stuff here, causes fetch to skip over an instruction????
+                        self.squash();
                     }
+                    // only used for CALL instruction?
                     PipelineInstructionResult::JumpSubRoutine {
                         new_pc,
                         ret_reg_val,
@@ -1824,10 +1892,14 @@ impl System {
                             "Pipeline::Writeback: Instruction has JSR result. New PC: {}, Return Register Value: {}",
                             new_pc, ret_reg_val
                         );
+                        // BUG: double check this logic...
                         self.registers.program_counter = new_pc;
                         let addr_data = MemBlock::Unsigned32(ret_reg_val);
                         self.registers
                             .write_normal(addr_data, RegisterGroup::General, RET_REG);
+                        info!("Pipeline::Writeback: Jump Subroutine instruction, squashing the rest of the pipeline");
+                        self.squash();
+                        self.pending_reg.remove(&(RegisterGroup::General, RET_REG));
                     }
                     PipelineInstructionResult::Flag { flags } => {
                         info!(
@@ -1859,7 +1931,6 @@ impl System {
         info!(
             "Pipeline::Writeback: Saving message returned from memory stage: {:?}",
             self.writeback
-
         );
         // if we have a Halt instr, we need to pass that message back to the system
         if let PipelineStageStatus::Instruction(PipelineInstruction {
@@ -1888,6 +1959,14 @@ impl System {
         info!("Incrementing the clock");
         self.clock += 1;
         msg
+    }
+
+    fn squash(&mut self) {
+        self.memory = PipelineStageStatus::Noop;
+        self.execute = PipelineStageStatus::Noop;
+        self.decode = PipelineStageStatus::Noop;
+        self.fetch = FetchState::default();
+        self.memory_system.clear_reqs();
     }
 
     // TODO: do this???
@@ -1961,6 +2040,13 @@ impl PipelineInstruction {
     /// Returns the target register group and number, if applicable
     pub fn get_dest_reg(&self) -> Option<(RegisterGroup, usize)> {
         match self.decode_instr {
+            Some(Instruction::Type1 { opcode, .. }) => {
+                if opcode == 0 {
+                    Some((RegisterGroup::General, RET_REG))
+                } else {
+                    None
+                }
+            }
             Some(
                 Instruction::Type2 {
                     opcode: 3..=5,
@@ -1970,10 +2056,7 @@ impl PipelineInstruction {
                 | Instruction::Type5 { reg_1, .. },
             ) => Some((RegisterGroup::General, reg_1)),
             Some(
-                Instruction::Type0 { .. }
-                | Instruction::Type1 { .. }
-                | Instruction::Type2 { .. }
-                | Instruction::Type3 { .. },
+                Instruction::Type0 { .. } | Instruction::Type2 { .. } | Instruction::Type3 { .. },
             )
             | None => None,
             Some(Instruction::Type4 { opcode, reg_1, .. }) => match opcode {
