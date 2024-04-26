@@ -5,8 +5,7 @@ use log::{error, info};
 use crate::{
     memory::memory_system::{LoadRequest, MemRequest, MemType},
     register::register_system::{
-        Register, RegisterGroup, RegisterSet, ALL_INSTR_TYPES, RET_REG, TYPE_0_INSTRS,
-        TYPE_1_INSTRS, TYPE_2_INSTRS, TYPE_3_INSTRS, TYPE_4_INSTRS,
+        Register, RegisterGroup, RegisterSet, ALL_INSTR_TYPES, RET_REG, TYPE_0_INSTRS, TYPE_1_INSTRS, TYPE_2_INSTRS, TYPE_3_INSTRS, TYPE_4_INSTRS, TYPE_5_INSTRS, TYPE_6_INSTRS
     },
     system::system::PipelineStage,
 };
@@ -202,7 +201,7 @@ impl Display for Instruction {
             Instruction::Type1 { opcode, immediate } => {
                 write!(
                     f,
-                    "{} 0x{immediate:08x}",
+                    "{} 0x{immediate:08X}",
                     TYPE_1_INSTRS
                         .get(*opcode as usize)
                         .unwrap_or(&"INVALID INSTRUCTION"),
@@ -262,7 +261,7 @@ impl Display for Instruction {
                 write!(
                     f,
                     "{} R{}, R{}, R{}",
-                    TYPE_4_INSTRS
+                    TYPE_5_INSTRS
                         .get(*opcode as usize)
                         .unwrap_or(&"INVALID INSTRUCTION"),
                     reg_1,
@@ -279,7 +278,7 @@ impl Display for Instruction {
                 write!(
                     f,
                     "{} F{}, F{}, F{}",
-                    TYPE_4_INSTRS
+                    TYPE_6_INSTRS
                         .get(*opcode as usize)
                         .unwrap_or(&"INVALID INSTRUCTION"),
                     freg_1,

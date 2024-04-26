@@ -1152,7 +1152,6 @@ impl System {
                     // split instruction into fields
                     if let Some(instr) = decode_raw_instr(raw) {
                         let src_regs = instr.get_src_regs();
-                        println!("BOFFA: {:?}", src_regs);
                         pending_regs = src_regs.iter().any(|src| self.pending_reg.contains(src));
                         info!("Pipeline::Decode: Pending source registers: {pending_regs}");
                         if !pending_regs {

@@ -205,19 +205,6 @@ impl GiggleFlopUI {
         Command::none()
     }
 
-    fn get_instructions_from_file() -> Result<Vec<String>> {
-        let program_file = "demo.gf";
-        info!("Loading instruction file {program_file}");
-        let f = File::open(program_file).expect("Unable to open instruction file");
-        let f = BufReader::new(f);
-        let mut lines = Vec::new();
-
-        for line in f.lines() {
-            lines.push(line?);
-        }
-        Ok(lines)
-    }
-
     fn get_config_element(&self) -> Element<Message> {
         let config_content: Element<Message> = Element::from({
             let step_button = || {
@@ -440,11 +427,9 @@ impl GiggleFlopUI {
 
         let mut column = Column::new();
         for (addr, decoded_instr) in raw_instrs {
-            let mut is_halt = false;
             let mut text = if let Some(instr) = decoded_instr {
                 let formatted = format!("0x{addr:08X}: {}", instr);
                 // TODO: Come up with a better solution here...
-                // is_halt = formatted.contains("HALT");
                 Text::new(formatted)
             } else {
                 Text::new(format!("0x{addr:08X}: INVALID INSTRUCTION"))
@@ -473,10 +458,6 @@ impl GiggleFlopUI {
                 })
                 .padding(0);
             column = column.push(button);
-            // TODO: Find a cleaner way to solve this problem
-            if is_halt {
-                break;
-            }
         }
 
         let scrollable_content: Element<Message> = Element::from({

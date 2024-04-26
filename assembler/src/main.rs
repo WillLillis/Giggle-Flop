@@ -2,7 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use anyhow::{anyhow, Result};
@@ -12,7 +12,7 @@ use regex::{Captures, Regex};
 
 use giggle_flop::instruction::instruction::Instruction;
 
-use giggle_flop::register::register_system::{FLOAT_REG_COUNT, GEN_REG_COUNT, ALL_INSTR_TYPES};
+use giggle_flop::register::register_system::{ALL_INSTR_TYPES, FLOAT_REG_COUNT, GEN_REG_COUNT};
 
 // TODO: Look into adding a .DATA directive...
 // TODO: Writing to disk...
@@ -58,49 +58,13 @@ enum RegisterGroup {
     FloatingPoint,
 }
 
-// #[derive(Debug, Clone, Eq, PartialEq, Copy)]
-// enum Instruction {
-//     Type0 {
-//         opcode: u32,
-//     }, // No arguments
-//     Type1 {
-//         opcode: u32,
-//         immediate: u32,
-//     }, // One immediate argument
-//     Type2 {
-//         opcode: u32,
-//         reg_1: usize,
-//         reg_2: usize,
-//     }, // Two general purpose register arguments
-//     Type3 {
-//         opcode: u32,
-//         freg_1: usize,
-//         freg_2: usize,
-//     }, // Two floating point register arguments
-//     Type4 {
-//         opcode: u32,
-//         reg_1: usize,
-//         immediate: u32,
-//     }, // One general purpose register argument, one immediate
-//     Type5 {
-//         opcode: u32,
-//         reg_1: usize,
-//         reg_2: usize,
-//         reg_3: usize,
-//     }, // Three general purpose register arguments
-//     Type6 {
-//         opcode: u32,
-//         freg_1: usize,
-//         freg_2: usize,
-//         freg_3: usize,
-//     }, // Three floating point register arguments
-// }
-
 #[derive(Parser, Debug)]
 struct AssemblerArgs {
     input_file: PathBuf,
     #[arg(long, short, help = "Path to store the output file")]
     output_path: Option<PathBuf>,
+    #[arg(long, short, help = "Verbose output")]
+    verbose: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -108,6 +72,7 @@ struct AssemblerArgs {
 struct AssemblerOptions {
     input_path: PathBuf,
     output_path: Option<PathBuf>,
+    verbose: bool,
 }
 
 impl From<AssemblerArgs> for AssemblerOptions {
@@ -115,46 +80,67 @@ impl From<AssemblerArgs> for AssemblerOptions {
         AssemblerOptions {
             input_path: value.input_file,
             output_path: value.output_path,
+            verbose: value.verbose,
         }
     }
 }
 
-fn read_input(path: &Path) -> Result<String> {
-    // try to canonicalize the path
-    let path = path.canonicalize()?;
-    // try to read the file in
+fn read_input(opts: &AssemblerOptions) -> Result<String> {
+    let path = opts.input_path.canonicalize()?;
+    if opts.verbose {
+        println!("Reading in file: {}", path.display());
+    }
     let data = std::fs::read_to_string(path)?;
-    // return
     Ok(data)
 }
 
-fn strip_comments(conts: &str) -> (String, HashSet<usize>) {
+// strips comments and empty lines
+fn strip(conts: &str, opts: &AssemblerOptions) -> (String, HashSet<usize>) {
+    if opts.verbose {
+        println!("Stripping comments and empty lines");
+    }
     let line_comment_regex = Regex::new(LINE_COMMENT_REGEX).unwrap();
     let mut cleaned = String::new();
     let mut removed_lines = HashSet::new();
 
     for (line_num, line) in conts.lines().enumerate() {
-        if line.is_empty() {
+        // better way to test for line with a bunch of spaces?
+        if line.trim().is_empty() {
+            if opts.verbose {
+                println!("Line {}: Removing empty", line_num + 1);
+            }
+            removed_lines.insert(line_num + 1);
             continue;
         }
-        if let Some(caps) = line_comment_regex.captures(line) {
+        if let Some(caps) = line_comment_regex.captures(line.trim()) {
             if let Some(cap) = caps.get(0) {
                 let removed = line.replace(cap.as_str(), "");
-                if removed.is_empty() {
+                if removed.is_empty() || removed.trim().is_empty() {
+                    if opts.verbose {
+                        println!("Line {}: Removing comment-only line", line_num + 1);
+                    }
                     removed_lines.insert(line_num + 1);
                 } else {
-                    cleaned += &format!("{}\n", line.replace(cap.as_str(), "").trim());
+                    let line = format!("{}\n", line.replace(cap.as_str(), "").trim());
+                    if opts.verbose {
+                        println!("Line {}: Retaining cleaned: {line}", line_num + 1);
+                    }
+                    cleaned += &line;
                 }
             }
         } else {
-            cleaned += &format!("{}\n", line.trim());
+            let line = format!("{}\n", line.trim());
+            if opts.verbose {
+                println!("Line {}: Retaining: {line}", line_num + 1);
+            }
+            cleaned += &line;
         }
     }
 
     (cleaned, removed_lines)
 }
 
-fn get_label_to_addr_map(conts: &str) -> HashMap<String, Address> {
+fn get_label_to_addr_map(conts: &str, opts: &AssemblerOptions) -> Result<HashMap<String, Address>> {
     let label_regex = Regex::new(LABEL_REGEX).unwrap();
     let mut curr_addr = INSTR_START_ADDR;
     let mut map = HashMap::new();
@@ -163,6 +149,15 @@ fn get_label_to_addr_map(conts: &str) -> HashMap<String, Address> {
         if let Some(cap) = label_regex.captures(line) {
             if let Some(label) = cap.get(0) {
                 let label = label.as_str().replace(':', "");
+                if let Some(addr) = map.get(&label) {
+                    return Err(anyhow!(
+                        "Multiple definitions of label {label}. Previous definition: 0x{:08X}",
+                        addr
+                    ));
+                }
+                if opts.verbose {
+                    println!("Adding {label}->0x{curr_addr:08X} to label table");
+                }
                 map.insert(label, curr_addr);
             }
         } else {
@@ -170,21 +165,27 @@ fn get_label_to_addr_map(conts: &str) -> HashMap<String, Address> {
         }
     }
 
-    map
+    Ok(map)
 }
 
-fn get_instr_type(instr: &str) -> Result<usize> {
+fn get_instr_type(instr: &str, line_num: usize, opts: &AssemblerOptions) -> Result<usize> {
     let opcode: String = if instr.contains([' ', ',']) {
         let splits: Vec<&str> = instr.split(&[' ', ',']).collect();
         match splits.first() {
             Some(word) => (*word).to_string(),
             None => {
-                return Err(anyhow!("Unable to determine instruction type: {instr}"));
+                return Err(anyhow!(
+                    "Line {line_num}: Unable to determine instruction type: {instr}"
+                ));
             }
         }
     } else {
         instr.to_owned()
     };
+
+    if opts.verbose {
+        println!("Line {line_num}: Parsed opcode as {opcode}");
+    }
 
     let type_check = |instr_list: &[&str]| -> bool {
         instr_list
@@ -198,10 +199,13 @@ fn get_instr_type(instr: &str) -> Result<usize> {
             .enumerate()
             .find_map(|(i, instrs)| if type_check(instrs) { Some(i) } else { None })
     {
+        if opts.verbose {
+            println!("Line {line_num}: Parsed as instruction type {instr_type}");
+        }
         Ok(instr_type)
     } else {
         Err(anyhow!(
-            "Unable to determine instruction type of given opcode: {opcode}"
+            "Line {line_num}: Unable to determine instruction type of given opcode: {opcode}, instruction {instr}"
         ))
     }
 }
@@ -456,10 +460,11 @@ fn parse_instruction(
     instr: &str,
     label_to_addr: &HashMap<String, Address>,
     line_num: usize,
+    opts: &AssemblerOptions,
 ) -> Result<Instruction> {
-    let instr_type = get_instr_type(instr)?;
+    let instr_type = get_instr_type(instr, line_num, opts)?;
 
-    match instr_type {
+    let parsed = match instr_type {
         0 => parse_type_0(instr, line_num),
         1 => parse_type_1(instr, label_to_addr, line_num),
         2 => parse_type_2(instr, line_num),
@@ -467,8 +472,21 @@ fn parse_instruction(
         4 => parse_type_4(instr, label_to_addr, line_num),
         5 => parse_type_5(instr, line_num),
         6 => parse_type_6(instr, line_num),
-        _ => Err(anyhow!("Invalid instruction type: {instr_type}")),
+        _ => Err(anyhow!(
+            "Line {line_num}: Invalid instruction type: {instr_type}"
+        )),
+    };
+    if opts.verbose {
+        match parsed {
+            Ok(parsed_instr) => {
+                println!("Line {line_num}: Parsed {instr} as {parsed_instr}");
+            }
+            Err(ref e) => {
+                println!("Line {line_num}: Failed to parse {instr} -- Error {e}");
+            }
+        }
     }
+    parsed
 }
 
 fn get_bin_rep(instr: &Instruction) -> Result<[u8; 4]> {
@@ -564,6 +582,7 @@ fn get_instructions(
     conts: &str,
     label_to_addr: &HashMap<String, Address>,
     comment_lines: &mut HashSet<usize>,
+    opts: &AssemblerOptions,
 ) -> Result<Vec<Instruction>> {
     let mut instructions: Vec<Instruction> = Vec::new();
 
@@ -575,7 +594,10 @@ fn get_instructions(
         let cleaned = line.trim().replace(':', "");
         // Only parse as instruction if it's not a label
         if !label_to_addr.contains_key(&cleaned) {
-            instructions.push(parse_instruction(&cleaned, label_to_addr, line_num)?);
+            if opts.verbose {
+                println!("Line {line_num}: Parsing {cleaned} as an instruction");
+            }
+            instructions.push(parse_instruction(&cleaned, label_to_addr, line_num, opts)?);
         }
         line_num += 1;
     }
@@ -584,12 +606,15 @@ fn get_instructions(
 }
 
 fn write_program(instrs: &Vec<Instruction>, opts: &AssemblerOptions) -> Result<()> {
-    // get the file open
     let output_path: PathBuf = if let Some(ref path) = opts.output_path {
         path.into()
     } else {
         DEFAULT_OUTPUT_PATH.into()
     };
+
+    if opts.verbose {
+        println!("Writing to path {}", output_path.display());
+    }
 
     // get the bin rep for each instruction
     let mut bin_reps: Vec<u8> = Vec::new();
@@ -606,14 +631,14 @@ fn write_program(instrs: &Vec<Instruction>, opts: &AssemblerOptions) -> Result<(
 
 /// main driver function
 fn assemble(opts: &AssemblerOptions) -> Result<()> {
-    let file_conts = read_input(&opts.input_path)?;
-    let (clean_conts, mut comment_lines) = strip_comments(&file_conts);
+    let file_conts = read_input(opts)?;
+    let (clean_conts, mut comment_lines) = strip(&file_conts, opts);
 
     // get symbol to address map
-    let label_to_addr = get_label_to_addr_map(&clean_conts);
+    let label_to_addr = get_label_to_addr_map(&clean_conts, opts)?;
     // TODO: figure out the reverse map Chip was talking about for debugging purposes...
     // parse instructions... (maybe output a second file with debugging symbols")
-    let instructions = get_instructions(&clean_conts, &label_to_addr, &mut comment_lines)?;
+    let instructions = get_instructions(&clean_conts, &label_to_addr, &mut comment_lines, opts)?;
     write_program(&instructions, opts)?;
 
     Ok(())
