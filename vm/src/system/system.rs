@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use log::{error, info};
 
@@ -122,17 +123,19 @@ impl System {
     }
 
     // TODO: Improve this by utilizing the drop file event
-    pub fn load_program(&mut self) {
-        let program_file = "test_bin";
-        info!("Loading program file {program_file}");
-        let program = std::fs::read(program_file).unwrap();
+    pub fn load_program(&mut self, path: PathBuf) {
+        info!("Loading program file {:?}", path);
+        let program = std::fs::read(&path).unwrap();
         info!("Loaded: {:?}", program);
 
         // check the length
         let program_len = program.len() * 8;
         let mem_len = self.memory_system.main_capacity().unwrap();
         if program_len > mem_len {
-            error!("Program {program_file} is too large to fit in main memory: {program_len} > {mem_len}");
+            error!(
+                "Program {} is too large to fit in main memory: {program_len} > {mem_len}",
+                path.display()
+            );
             panic!("Program too large");
         }
 
@@ -1364,12 +1367,12 @@ impl System {
                                 7 => {
                                     instr.instr_result =
                                         if self.registers.status.get(FlagIndex::EQ as usize) {
-                                            info!("JE Instruction...EQ flag is set");
+                                            info!("IJE Instruction...EQ flag is set");
                                             PipelineInstructionResult::Branch {
                                                 new_pc: src_addr + *immediate,
                                             }
                                         } else {
-                                            info!("JE Instruction...EQ flag is not set");
+                                            info!("IJE Instruction...EQ flag is not set");
                                             PipelineInstructionResult::Empty
                                         }
                                 }
@@ -1377,12 +1380,12 @@ impl System {
                                 8 => {
                                     instr.instr_result =
                                         if !self.registers.status.get(FlagIndex::EQ as usize) {
-                                            info!("JNE Instruction...EQ flag is not set");
+                                            info!("IJNE Instruction...EQ flag is not set");
                                             PipelineInstructionResult::Branch {
                                                 new_pc: src_addr + *immediate,
                                             }
                                         } else {
-                                            info!("JNE Instruction...EQ flag is set");
+                                            info!("IJNE Instruction...EQ flag is set");
                                             PipelineInstructionResult::Empty
                                         }
                                 }
@@ -1390,12 +1393,12 @@ impl System {
                                 9 => {
                                     instr.instr_result =
                                         if self.registers.status.get(FlagIndex::GT as usize) {
-                                            info!("JNE Instruction...GT flag is set");
+                                            info!("IJNE Instruction...GT flag is set");
                                             PipelineInstructionResult::Branch {
                                                 new_pc: src_addr + *immediate,
                                             }
                                         } else {
-                                            info!("JNE Instruction...GT flag is not set");
+                                            info!("IJNE Instruction...GT flag is not set");
                                             PipelineInstructionResult::Empty
                                         }
                                 }
@@ -1403,12 +1406,12 @@ impl System {
                                 10 => {
                                     instr.instr_result =
                                         if self.registers.status.get(FlagIndex::LT as usize) {
-                                            info!("JLE Instruction...LT flag is set");
+                                            info!("IJLE Instruction...LT flag is set");
                                             PipelineInstructionResult::Branch {
                                                 new_pc: src_addr + *immediate,
                                             }
                                         } else {
-                                            info!("JLE Instruction...LT flag is not set");
+                                            info!("IJLE Instruction...LT flag is not set");
                                             PipelineInstructionResult::Empty
                                         }
                                 }
@@ -1418,12 +1421,12 @@ impl System {
                                         if self.registers.status.get(FlagIndex::EQ as usize)
                                             || self.registers.status.get(FlagIndex::GT as usize)
                                         {
-                                            info!("JGTE Instruction...EQ or GT flag is set");
+                                            info!("IJGTE Instruction...EQ or GT flag is set");
                                             PipelineInstructionResult::Branch {
                                                 new_pc: src_addr + *immediate,
                                             }
                                         } else {
-                                            info!("JGTE Instruction...EQ and GT flag are not set");
+                                            info!("IJGTE Instruction...EQ and GT flag are not set");
                                             PipelineInstructionResult::Empty
                                         }
                                 }
@@ -1433,12 +1436,12 @@ impl System {
                                         if self.registers.status.get(FlagIndex::EQ as usize)
                                             || self.registers.status.get(FlagIndex::LT as usize)
                                         {
-                                            info!("JLTE Instruction...EQ or LT flag is set");
+                                            info!("IJLTE Instruction...EQ or LT flag is set");
                                             PipelineInstructionResult::Branch {
                                                 new_pc: src_addr + *immediate,
                                             }
                                         } else {
-                                            info!("JLTE Instruction...EQ and LT flag are not set");
+                                            info!("IJLTE Instruction...EQ and LT flag are not set");
                                             PipelineInstructionResult::Empty
                                         }
                                 }

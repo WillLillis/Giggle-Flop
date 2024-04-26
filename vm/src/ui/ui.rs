@@ -1,12 +1,15 @@
+use iced::event::Event;
 use iced::widget::scrollable::Properties;
 use iced::widget::{button, checkbox, pane_grid, Button, Column, PaneGrid, Text};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
 use iced::window::{self, Mode};
-use iced::{Alignment, Color, Command, Element, Length, Theme};
+use iced::{event, Alignment, Color, Command, Element, Length, Subscription, Theme};
 use log::info;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;
@@ -22,7 +25,8 @@ static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 
 pub fn enter() -> iced::Result {
     iced::program("Giggle-Flop", GiggleFlopUI::update, GiggleFlopUI::view)
-        .load(|| window::change_mode(window::Id::MAIN, Mode::Fullscreen))
+        //.load(|| window::change_mode(window::Id::MAIN, Mode::Fullscreen))
+        .subscription(GiggleFlopUI::subscription)
         .theme(GiggleFlopUI::theme)
         .run()
 }
@@ -41,7 +45,7 @@ struct GiggleFlopUI {
     breakpoints: HashSet<u32>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum Message {
     Scrolled(scrollable::Viewport),
     SelectMemoryLevel(usize),
@@ -52,6 +56,7 @@ enum Message {
     UsePipeline(bool),
     LoadProgram,
     LineClicked(u32),
+    EventOccurred(Event),
     // maybe delete
     Clicked(pane_grid::Pane),
     Resized(pane_grid::ResizeEvent),
@@ -95,6 +100,10 @@ impl GiggleFlopUI {
             use_pipeline: true,
             breakpoints: HashSet::new(),
         }
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        event::listen().map(Message::EventOccurred)
     }
 
     fn update(&mut self, message: Message) -> Command<Message> {
@@ -159,6 +168,13 @@ impl GiggleFlopUI {
                     cont = self.run;
                 }
             }
+            Message::EventOccurred(event) => {
+                if let Event::Window(_id, window::Event::FileDropped(path)) = event {
+                    self.system.load_program(path);
+                }
+                // TODO: Check for other file events, maybe some different actions for them?
+                // e.g. hover, hover left, etc.
+            }
             Message::AdvanceInstruction => {
                 // TODO: this
                 // does this need to be a thing?
@@ -171,7 +187,8 @@ impl GiggleFlopUI {
             Message::LoadProgram => {
                 // TODO: Fill in later...
                 self.system.reset();
-                self.system.load_program();
+                self.system
+                    .load_program(PathBuf::from_str("test_bin").unwrap());
             }
             Message::LineClicked(addr) => {
                 if !self.breakpoints.remove(&addr) {
