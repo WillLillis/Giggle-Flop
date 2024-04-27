@@ -1164,15 +1164,23 @@ impl System {
                                     0
                                 }
                             };
-
-                            let decoded = PipelineStageStatus::Instruction(PipelineInstruction {
-                                src_addr: Some(fetch_addr),
-                                raw_instr: Some(raw),
-                                decode_instr: None,
-                                instr_result: PipelineInstructionResult::Empty,
-                            });
-                            info!("Pipeline::Fetch: Passing on raw instruction: {:?}", decoded);
-                            decoded
+                            if decode_blocked {
+                                // BUG: Blocking because of this set?
+                                info!("Pipeline::Fetch: Fetched instruction, decode is blocked, saving for next cycle");
+                                self.fetch.raw_instr = Some(raw);
+                                self.fetch.src_addr = Some(fetch_addr);
+                                PipelineStageStatus::Noop
+                            } else {
+                                let decoded =
+                                    PipelineStageStatus::Instruction(PipelineInstruction {
+                                        src_addr: Some(fetch_addr),
+                                        raw_instr: Some(raw),
+                                        decode_instr: None,
+                                        instr_result: PipelineInstructionResult::Empty,
+                                    });
+                                info!("Pipeline::Fetch: Passing on raw instruction: {:?}", decoded);
+                                decoded
+                            }
                         } else {
                             error!("Pipeline::Fetch: Received empty memory response, treating as a NOOP");
                             PipelineStageStatus::Noop
@@ -1201,9 +1209,13 @@ impl System {
                     "Pipeline::Fetch: Have instruction {:?}, decode is unblocked, returning instruction result",
                     instr
                 );
+                let raw_instr = self.fetch.raw_instr;
+                let src_addr = self.fetch.src_addr;
+                self.fetch.raw_instr = None;
+                self.fetch.src_addr = None;
                 PipelineStageStatus::Instruction(PipelineInstruction {
-                    raw_instr: self.fetch.raw_instr,
-                    src_addr: self.fetch.src_addr,
+                    raw_instr,
+                    src_addr,
                     decode_instr: None,
                     instr_result: PipelineInstructionResult::Empty,
                 })
@@ -2135,7 +2147,7 @@ impl System {
                                 self.registers.write_status(idx, *flag)
                             }
                         }
-                        self.pending_reg.remove(&(RegisterGroup::General, 0));
+                        self.pending_reg.remove(&(RegisterGroup::Flag, 0));
                     }
                     PipelineInstructionResult::Empty => {
                         info!("Pipeline::Writeback: Instruction has empty result, doing nothing");
