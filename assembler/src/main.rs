@@ -44,7 +44,7 @@ const REG_FIELD_WIDTH: usize = 4;
 #[allow(dead_code)]
 const TYPE_0_OPCODE_FIELD_WIDTH: usize = 1;
 const TYPE_1_OPCODE_FIELD_WIDTH: usize = 4;
-const TYPE_2_OPCODE_FIELD_WIDTH: usize = 3;
+const TYPE_2_OPCODE_FIELD_WIDTH: usize = 4;
 const TYPE_3_OPCODE_FIELD_WIDTH: usize = 1;
 const TYPE_4_OPCODE_FIELD_WIDTH: usize = 4;
 const TYPE_5_OPCODE_FIELD_WIDTH: usize = 4;

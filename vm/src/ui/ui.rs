@@ -2,12 +2,10 @@ use iced::event::Event;
 use iced::widget::scrollable::Properties;
 use iced::widget::{button, checkbox, pane_grid, Button, Column, PaneGrid, Text};
 use iced::widget::{column, container, pick_list, row, scrollable, text, Scrollable};
-use iced::window::{self, Mode};
+use iced::window;
 use iced::{event, Alignment, Color, Command, Element, Length, Subscription, Theme};
 use log::info;
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -18,8 +16,6 @@ use crate::instruction::instruction::{decode_raw_instr, Instruction};
 use crate::memory::memory_system::MEM_BLOCK_WIDTH;
 use crate::register::register_system::RegisterGroup;
 use crate::system::system::{System, SystemMessage};
-
-use anyhow::Result;
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
 

@@ -1,35 +1,64 @@
-// We'll start reading from a known memory location
+// We'll start reading data from a known memory location
 // The first word will be the length, and then every 
 // word after that (up to the length) will be treated
 // as a u32...
+// Bubble Sort:
+//
 //  for i = 0..n-1
 //      for j = 0..n-i-1
 //          if arr[j] > arr[j+1]
-//              swap
-// R0 = i, R1 = j, R2 = n use other registers for scratch
-// Start at address 640...
+//              /* Swap arr[j] and arr[j+1] */
+
+// Arbitrarily start at address 640...
 
 // Get the length
-LD32 R2, 640 // R2 <- n
+LD32 R1, 640 // R1 <- n
 
 // Load start address into R0
 ADDIM R0, 672 // 640 + 32
 
-// Load the stop address into R2
+// Load the stop address into R1
 ADDIM R3, 32
-MULU R2, R2, R3 // R2 <- n * 32 (length of array)
-ADDU R2, R0, R2 // First address past the end of the array
+MULU R1, R1, R3 // R1 <- n * 32 (length of array in bits)
+ADDU R1, R0, R1 
+SUBU R1, R1, R3 // R1 now holds the address of the 2nd to last entry
 
-// for (i = 0; i < n - 1; i++)
+XORI R3, R3, R3
+
+// outer loop init
+XORI R2, R2, R2 
+ADDU R2, R2, R0 // R2 <- &data[0], analogous to i
 OUTER_LOOP:
-    
+    // inner loop init, R5 analogous to n - i - 1
+    XORI R5, R5, R5
+    ADDU R5, R5, R1 // R5 <- &data[n-i]
+    SUBU R5, R5, R2 // R5 <- &data[n-i-1]
+
+    XORI R3, R3, R3 // R3 analogous to j
+    ADDU R3, R3, R0 // R3 <- &data[0]
     INNER_LOOP:
-        // compute stop address
-        // j = 0
+
+        // comparison and swap here
+        XORI R4, R4, R4
+        ADDU R4, R4, R3
+        ADDIM R4, 32 // R4 <- &data[j+1]
+        // load values pointed to by R3 and R4 
+        // into R6 and R7, compare, then branch accordingly
+        LDIN32 R6, R3 // R6 <- &data[j]
+        LDIN32 R7, R4 // R7 <- &data[j+1]
+
+        CMP32 R6, R7
+        JLTE INNER_LOOP_END // if they're already in order, don't swap
+        STIN32 R3, R7 // swap
+        STIN32 R4, R6 // ^
+
+        INNER_LOOP_END:
+            ADDIM R3, 32 // j++
+            CMP32 R3, R5 // check termination condition
+            JLT INNER_LOOP
 
 
-
-    ADDIM R0, 32
-    CMP32 R0, R2
+    ADDIM R2, 32 // i++
+    CMP32 R2, R1
     JLT OUTER_LOOP
-// how do we want to evaluate the loop ending?
+    HALT

@@ -19,7 +19,9 @@ pub const TYPE_1_INSTRS: &[&str] = &[
     "CALL", "JE", "JNE", "JGT", "JLT", "JGTE", "JLTE", "IJE", "IJNE", "IJGT", "IJLT", "IJGTE",
     "IJLTE",
 ];
-pub const TYPE_2_INSTRS: &[&str] = &["CMP8", "CMP16", "CMP32", "LDIN8", "LDIN16", "LDIN32"];
+pub const TYPE_2_INSTRS: &[&str] = &[
+    "CMP8", "CMP16", "CMP32", "LDIN8", "LDIN16", "LDIN32", "STIN8", "STIN16", "STIN32",
+];
 pub const TYPE_3_INSTRS: &[&str] = &["CMPF"];
 pub const TYPE_4_INSTRS: &[&str] = &[
     "LD8", "LD16", "LD32", "LDI8", "LDI16", "LDI32", "ST8", "ST16", "ST32", "ADDIM",

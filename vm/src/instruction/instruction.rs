@@ -1,11 +1,12 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::RangeBounds};
 
 use log::{error, info};
 
 use crate::{
-    memory::memory_system::{LoadRequest, MemRequest, MemType},
+    memory::memory_system::{LoadRequest, MemBlock, MemRequest, MemType, StoreRequest},
     register::register_system::{
-        Register, RegisterGroup, RegisterSet, ALL_INSTR_TYPES, RET_REG, TYPE_0_INSTRS, TYPE_1_INSTRS, TYPE_2_INSTRS, TYPE_3_INSTRS, TYPE_4_INSTRS, TYPE_5_INSTRS, TYPE_6_INSTRS
+        Register, RegisterGroup, RegisterSet, ALL_INSTR_TYPES, RET_REG, TYPE_0_INSTRS,
+        TYPE_1_INSTRS, TYPE_2_INSTRS, TYPE_3_INSTRS, TYPE_4_INSTRS, TYPE_5_INSTRS, TYPE_6_INSTRS,
     },
     system::system::PipelineStage,
 };
@@ -67,13 +68,13 @@ impl Instruction {
         match self {
             Instruction::Type2 {
                 opcode,
-                reg_1: _,
+                reg_1,
                 reg_2,
             } => {
                 let mem_type = match opcode {
-                    3 => MemType::Unsigned8,
-                    4 => MemType::Unsigned16,
-                    5 => MemType::Unsigned32,
+                    3 | 6 => MemType::Unsigned8,
+                    4 | 7 => MemType::Unsigned16,
+                    5 | 8 => MemType::Unsigned32,
                     _ => {
                         return None;
                     }
@@ -82,11 +83,24 @@ impl Instruction {
                 let address =
                     usize::try_from(gen_regs[*reg_2].data.force_unsigned()).unwrap_or_default();
 
-                Some(MemRequest::Load(LoadRequest {
-                    issuer: issuer.unwrap_or_default(),
-                    address, // BUG: Fix this, don't treat register as literal value
-                    width: mem_type,
-                }))
+                if (3..=5).contains(opcode) {
+                    Some(MemRequest::Load(LoadRequest {
+                        issuer: issuer.unwrap_or_default(),
+                        address,
+                        width: mem_type,
+                    }))
+                } else if (6..=8).contains(opcode) {
+                    let data = MemBlock::Unsigned32(
+                        u32::try_from(gen_regs[*reg_1].data.force_unsigned()).unwrap_or_default(),
+                    );
+                    Some(MemRequest::Store(StoreRequest {
+                        issuer: issuer.unwrap_or_default(),
+                        address,
+                        data,
+                    }))
+                } else {
+                    None
+                }
             }
             Instruction::Type4 {
                 opcode,
@@ -323,9 +337,9 @@ pub fn decode_raw_instr(raw: u32) -> Option<Instruction> {
             Some(Instruction::Type1 { opcode, immediate })
         }
         2 => {
-            // opcode takes three bits
-            let opcode = value & MASK_3;
-            value >>= 3;
+            // opcode takes four bits
+            let opcode = value & MASK_4;
+            value >>= 4;
 
             // general register 1 argument takes 4 bits
             let reg_1 = value & MASK_4;

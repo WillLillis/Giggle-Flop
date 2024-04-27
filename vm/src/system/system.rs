@@ -513,6 +513,87 @@ impl System {
                         return SystemMessage::InstructionPending;
                     }
                 }
+                // STIN8
+                6 => {
+                    let address = self.registers.general[reg_2]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let data = MemBlock::Unsigned32(
+                        self.registers.general[reg_1]
+                            .data
+                            .force_unsigned()
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let req = MemRequest::Store(StoreRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        data,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::StoreComplete) = resp {
+                        info!("NoPipeline: Received store complete response");
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // STIN16
+                7 => {
+                    let address = self.registers.general[reg_2]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let data = MemBlock::Unsigned32(
+                        self.registers.general[reg_1]
+                            .data
+                            .force_unsigned()
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let req = MemRequest::Store(StoreRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        data,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::StoreComplete) = resp {
+                        info!("NoPipeline: Received store complete response");
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
+                // STIN32
+                8 => {
+                    let address = self.registers.general[reg_2]
+                        .data
+                        .force_unsigned()
+                        .try_into()
+                        .unwrap();
+                    let data = MemBlock::Unsigned32(
+                        self.registers.general[reg_1]
+                            .data
+                            .force_unsigned()
+                            .try_into()
+                            .unwrap(),
+                    );
+                    let req = MemRequest::Store(StoreRequest {
+                        issuer: PipelineStage::Execute,
+                        address,
+                        data,
+                    });
+                    let resp = self.memory_system.request(&req);
+                    if let Ok(MemResponse::StoreComplete) = resp {
+                        info!("NoPipeline: Received store complete response");
+                    } else {
+                        info!("NoPipeline: Recieved resp from memory system {:?}", resp);
+                        return SystemMessage::InstructionPending;
+                    }
+                }
                 _ => {
                     error!("NoPipeline: Unrecognized opcode, passing on as NOOP");
                 }
