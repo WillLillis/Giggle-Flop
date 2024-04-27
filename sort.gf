@@ -9,19 +9,21 @@
 //          if arr[j] > arr[j+1]
 //              /* Swap arr[j] and arr[j+1] */
 
-// Arbitrarily start at address 640...
+// Arbitrarily start at address 1152...
 
 // Get the length
-LD32 R1, 640 // R1 <- n
+LD32 R1, 1152 // R1 <- n
 
 // Load start address into R0
-ADDIM R0, 672 // 640 + 32
+ADDIM R0, 1184 // 640 + 32
 
 // Load the stop address into R1
 ADDIM R3, 32
 MULU R1, R1, R3 // R1 <- n * 32 (length of array in bits)
-ADDU R1, R0, R1 
+ADDU R1, R0, R1
+SUBU R1, R1, R3
 SUBU R1, R1, R3 // R1 now holds the address of the 2nd to last entry
+// BUG HERE, R1 is past the end 
 
 XORI R3, R3, R3
 
@@ -31,7 +33,7 @@ ADDU R2, R2, R0 // R2 <- &data[0], analogous to i
 OUTER_LOOP:
     // inner loop init, R5 analogous to n - i - 1
     XORI R5, R5, R5
-    ADDU R5, R5, R1 // R5 <- &data[n-i]
+    ADDU R5, R5, R1 // R5 <- &data[n-1]
     SUBU R5, R5, R2 // R5 <- &data[n-i-1]
 
     XORI R3, R3, R3 // R3 analogous to j
@@ -49,8 +51,8 @@ OUTER_LOOP:
 
         CMP32 R6, R7
         JLTE INNER_LOOP_END // if they're already in order, don't swap
-        STIN32 R3, R7 // swap
-        STIN32 R4, R6 // ^
+        STIN32 R7, R3 // swap - BUG HERE
+        STIN32 R6, R4 // ^
 
         INNER_LOOP_END:
             ADDIM R3, 32 // j++

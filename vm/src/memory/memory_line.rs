@@ -6,6 +6,7 @@ use crate::memory::memory_block::MemBlock;
 use crate::memory::memory_system::MEM_BLOCK_WIDTH;
 
 use anyhow::{anyhow, Result};
+use log::error;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct MemLine {
@@ -58,6 +59,7 @@ impl MemLine {
         }
         let line_len = self.data.len();
         let line_idx = (address % (line_len * MEM_BLOCK_WIDTH)) / MEM_BLOCK_WIDTH;
+        error!("Force store: {:?}", data);
         self.data[line_idx] = data;
 
         Ok(())

@@ -15,7 +15,6 @@ use giggle_flop::instruction::instruction::Instruction;
 use giggle_flop::register::register_system::{ALL_INSTR_TYPES, FLOAT_REG_COUNT, GEN_REG_COUNT};
 
 // TODO: Look into adding a .DATA directive...
-// TODO: Writing to disk...
 
 type Address = u32;
 
@@ -616,20 +615,19 @@ fn write_program(instrs: &Vec<Instruction>, opts: &AssemblerOptions) -> Result<(
         println!("Writing to path {}", output_path.display());
     }
 
-    // get the bin rep for each instruction
     let mut bin_reps: Vec<u8> = Vec::new();
 
     for instr in instrs {
         bin_reps.append(&mut get_bin_rep(instr)?.into());
     }
 
-    // write
     std::fs::write(output_path, &bin_reps)?;
 
     Ok(())
 }
 
-/// main driver function
+/// Reads in the contents of the file specified in `opts`, assembles the instructions
+/// specified within, and writes it to the file specified in `opts`
 fn assemble(opts: &AssemblerOptions) -> Result<()> {
     let file_conts = read_input(opts)?;
     let (clean_conts, mut comment_lines) = strip(&file_conts, opts);

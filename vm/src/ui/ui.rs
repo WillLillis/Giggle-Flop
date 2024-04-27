@@ -13,7 +13,7 @@ use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;
 
 use crate::instruction::instruction::{decode_raw_instr, Instruction};
-use crate::memory::memory_system::MEM_BLOCK_WIDTH;
+use crate::memory::memory_system::{MemBlock, MEM_BLOCK_WIDTH};
 use crate::register::register_system::RegisterGroup;
 use crate::system::system::{System, SystemMessage};
 
@@ -69,9 +69,10 @@ impl Pane {
     }
 }
 
+// BUG: LD32 isn't grabbing from memory correctly
 impl GiggleFlopUI {
     fn new() -> Self {
-        let system = System::default();
+        let mut system = System::default();
         let memory_levels = (0..system.memory_system.num_levels()).collect();
         let register_groups = {
             let mut groups = Vec::new();
@@ -185,6 +186,21 @@ impl GiggleFlopUI {
                 self.system.reset();
                 self.system
                     .load_program(PathBuf::from_str("test_bin").unwrap());
+                let mut addr = 1152;
+                let data_len = MemBlock::Unsigned32(4);
+                self.system.memory_system.force_store(addr, data_len);
+                addr += MEM_BLOCK_WIDTH;
+                let data_1 = MemBlock::Unsigned32(3);
+                self.system.memory_system.force_store(addr, data_1);
+                addr += MEM_BLOCK_WIDTH;
+                let data_2 = MemBlock::Unsigned32(2);
+                self.system.memory_system.force_store(addr, data_2);
+                addr += MEM_BLOCK_WIDTH;
+                let data_1 = MemBlock::Unsigned32(1);
+                self.system.memory_system.force_store(addr, data_1);
+                addr += MEM_BLOCK_WIDTH;
+                let data_2 = MemBlock::Unsigned32(0);
+                self.system.memory_system.force_store(addr, data_2);
             }
             Message::LineClicked(addr) => {
                 if !self.breakpoints.remove(&addr) {

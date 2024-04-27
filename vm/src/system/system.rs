@@ -1284,6 +1284,7 @@ impl System {
                 info!("Pipeline::Decode: Passing on a Noop status");
                 PipelineStageStatus::Noop
             }
+            // BUG: somehow this is bad, dependent instructions are being dropped?
             // instruction has operands, execute not blocked
             (false, false) => {
                 let completed_instr = if PipelineStageStatus::Stall == self.decode {
@@ -1305,6 +1306,7 @@ impl System {
                             reg
                         );
                         self.pending_reg.insert(reg);
+                        error!("Adding {:?} to pending registers", reg);
                     }
                 }
                 info!(
@@ -2082,7 +2084,7 @@ impl System {
                         self.registers.write_normal(data, reg_group, dest_reg);
                         info!("Pipeline::Writeback: Updating pending registers");
                         if self.pending_reg.remove(&(reg_group, dest_reg)) {
-                            info!(
+                            error!(
                                 "Pipeline::Writeback: Register group {}, number {} cleared from pending",
                                 reg_group, dest_reg
                             );
@@ -2166,10 +2168,8 @@ impl System {
         }) = finished_instr
         {
             info!("Passing Halt message");
-            info!("LOOKHERE: HALT");
             SystemMessage::Halt
         } else {
-            info!("LOOKHERE: {:?}", finished_instr);
             SystemMessage::InstructionCompleted
         }
     }
@@ -2265,7 +2265,7 @@ pub struct PipelineInstruction {
 }
 impl PipelineInstruction {
     /// Returns the target register group and number, if applicable
-    /// TODO: Add flag registers for comparisons...
+    /// TODO: Clean up flag registers for comparisons...
     pub fn get_dest_reg(&self) -> Option<(RegisterGroup, usize)> {
         match self.decode_instr {
             Some(Instruction::Type1 { opcode, .. }) => {
