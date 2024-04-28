@@ -17,7 +17,7 @@ pub const N_ADDRESS_BITS: usize = 21;
 pub const ADDRESS_SPACE_SIZE: usize = 2usize.pow(N_ADDRESS_BITS as u32);
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MemType {
     Unsigned8,
     Unsigned32,
@@ -28,24 +28,36 @@ pub enum MemType {
     Float32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LoadRequest {
     pub issuer: PipelineStage,
     pub address: usize,
     pub width: MemType,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash)]
 pub struct StoreRequest {
     pub issuer: PipelineStage,
     pub address: usize,
     pub data: MemBlock,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Hash)]
 pub enum MemRequest {
     Load(LoadRequest),
     Store(StoreRequest),
+}
+
+impl From<LoadRequest> for MemRequest {
+    fn from(value: LoadRequest) -> Self {
+        Self::Load(value)
+    }
+}
+
+impl From<StoreRequest> for MemRequest {
+    fn from(value: StoreRequest) -> Self {
+        Self::Store(value)
+    }
 }
 
 impl MemRequest {
@@ -147,7 +159,7 @@ impl Memory {
     /// Used along with a squash in the pipeline
     pub fn clear_reqs(&mut self) {
         for level in self.levels.iter_mut() {
-            level.curr_req = None;
+            level.curr_reqs.clear();
             level.reqs.clear();
         }
     }
@@ -251,55 +263,44 @@ impl Memory {
         }
 
         // only use request queue for main memory
-        let latency = self.main_latency().unwrap();
         let main_mem = self.levels.last_mut().unwrap();
-        match main_mem.curr_req {
-            Some((0, MemRequest::Store(ref completed_req))) if completed_req == req => {
+        let mem_req = MemRequest::from(req.clone());
+        match main_mem.curr_reqs.get(&mem_req) {
+            Some(0) => {
                 info!("Store request completed, request: {:?}", req);
                 // actually write the data...
                 main_mem
-                    .write_block(completed_req.address, completed_req.data)
+                    .write_block(req.address, req.data)
                     .expect("Write failed -- Error {e}");
 
                 // book-keeping on request queue
                 info!("Popping head of request queue");
-                main_mem.curr_req = None;
-                if let Some(next_req) = main_mem.reqs.pop_front() {
-                    info!(
-                        "Moving next pending request to the head, request: {:?}",
-                        next_req
-                    );
-                    main_mem.curr_req = Some((main_mem.latency(), next_req));
+                main_mem.curr_reqs.remove(&mem_req);
+                if !main_mem.curr_reqs.iter().any(|(_req, delay)| *delay > 0) {
+                    if let Some(next_req) = main_mem.reqs.pop_front() {
+                        info!(
+                            "Moving next pending request to the head, request: {:?}",
+                            next_req
+                        );
+                        main_mem.curr_reqs.insert(next_req, main_mem.latency());
+                    }
                 }
                 return Ok(MemResponse::StoreComplete);
             }
-            Some((_delay, MemRequest::Store(ref pending_req))) => {
-                if pending_req != req {
-                    info!(
-                        "Other Store request at head of request queue: {:?}",
-                        pending_req
-                    );
-                    if !main_mem.reqs.contains(&MemRequest::Store(req.clone())) {
-                        info!("Adding request to queue: {:?}", req);
-                        main_mem.reqs.push_back(MemRequest::Store(req.clone()));
-                    } else {
-                        info!("Request already in queue: {:?}", req);
-                    }
-                } else {
-                    info!("Request pending: {:?}", pending_req);
-                }
-            }
-            Some((_, ref pending_req)) => {
-                info!("Other request at head of request queue: {:?}", pending_req);
-                info!("Adding request to queue: {:?}", req);
-                main_mem.reqs.push_back(MemRequest::Store(req.clone()));
+            Some(delay) => {
+                info!("Request pending: {delay} cycles left");
             }
             None => {
-                info!(
-                    "No current request, adding request to head of queue, request: {:?}",
-                    req
-                );
-                main_mem.curr_req = Some((latency, MemRequest::Store(req.clone())));
+                if !main_mem.curr_reqs.iter().any(|(_req, delay)| *delay > 0) {
+                    if let Some(next_req) = main_mem.reqs.pop_front() {
+                        main_mem.curr_reqs.insert(next_req, main_mem.latency());
+                        main_mem.reqs.push_back(mem_req);
+                    } else {
+                        main_mem.curr_reqs.insert(mem_req, main_mem.latency());
+                    }
+                } else {
+                    main_mem.reqs.push_back(mem_req);
+                }
             }
         }
 

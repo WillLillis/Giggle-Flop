@@ -29,7 +29,7 @@ pub enum SystemMessage {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Default, Hash)]
 pub enum PipelineStage {
     Fetch,
     Decode,

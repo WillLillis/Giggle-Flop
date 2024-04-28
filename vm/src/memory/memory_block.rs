@@ -18,6 +18,27 @@ pub enum MemBlock {
     Signed32(i32),
     Float32(f32),
 }
+
+// is this ok???
+impl Eq for MemBlock {}
+
+impl std::hash::Hash for MemBlock {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            MemBlock::Unsigned8(x) => x.hash(state),
+            MemBlock::Unsigned16(x) => x.hash(state),
+            MemBlock::Unsigned32(x) => x.hash(state),
+            MemBlock::Signed8(x) => x.hash(state),
+            MemBlock::Signed16(x) => x.hash(state),
+            MemBlock::Signed32(x) => x.hash(state),
+            MemBlock::Float32(x) => {
+                let data = x.to_be_bytes();
+                data.hash(state)
+            }
+        }
+    }
+}
+
 impl MemBlock {
     pub fn to_be_bytes(self) -> [u8; 4] {
         match self {

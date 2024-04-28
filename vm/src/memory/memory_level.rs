@@ -1,6 +1,6 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Display;
 
 use crate::memory::memory_block::MemBlock;
@@ -11,13 +11,13 @@ use crate::memory::memory_system::{
 use crate::system::system::Cycle;
 
 use anyhow::{anyhow, Result};
-use log::error;
+use log::{error, info};
 
 #[derive(Debug, Clone, Default)]
 pub struct MemoryLevel {
     contents: Vec<MemLine>,
     pub reqs: VecDeque<MemRequest>,
-    pub curr_req: Option<(usize, MemRequest)>,
+    pub curr_reqs: HashMap<MemRequest, usize>,
     latency: Cycle,
     is_main: bool,
     line_len: usize,
@@ -32,7 +32,7 @@ impl Display for MemoryLevel {
         write!(
             f,
             "Latency: {}\nRequest Queue: {:?}\nCurrent Request: {:?}\n\nContents:\n{}",
-            self.latency, self.reqs, self.curr_req, conts
+            self.latency, self.reqs, self.curr_reqs, conts
         )?;
 
         Ok(())
@@ -49,7 +49,7 @@ impl MemoryLevel {
             contents: vec![MemLine::new(None, line_len); n_lines],
             latency,
             reqs: VecDeque::new(),
-            curr_req: None,
+            curr_reqs: HashMap::new(),
             is_main,
             line_len,
         }
@@ -82,26 +82,38 @@ impl MemoryLevel {
         if !self.is_main && !self.contents[line_idx].contains_address(address) {
             return MemResponse::Miss;
         }
-        match self.curr_req {
-            Some((0, MemRequest::Load(ref completed_req))) if completed_req == req => {
+        let mem_req = MemRequest::from(req.clone());
+        match self.curr_reqs.get(&mem_req) {
+            Some(0) => {
+                info!("Load request completed, request: {:?}", mem_req);
                 let data = self.contents[line_idx].clone();
 
-                self.curr_req = None;
-                if let Some(next_req) = self.reqs.pop_front() {
-                    self.curr_req = Some((self.latency, next_req));
+                self.curr_reqs.remove(&mem_req);
+                if !self.curr_reqs.iter().any(|(_req, delay)| *delay > 0) {
+                    if let Some(next_req) = self.reqs.pop_front() {
+                        info!(
+                            "Moving next pending request to the head, request: {:?}",
+                            next_req
+                        );
+                        self.curr_reqs.insert(next_req, self.latency);
+                    }
                 }
                 return MemResponse::Load(LoadResponse { data });
             }
-            Some((_delay, MemRequest::Load(ref pending_req))) => {
-                if pending_req != req {
-                    self.reqs.push_back(MemRequest::Load(req.clone()));
-                }
-            }
-            Some((_, _)) => {
-                self.reqs.push_back(MemRequest::Load(req.clone()));
+            Some(delay) => {
+                info!("Request pending: {delay} cycles left");
             }
             None => {
-                self.curr_req = Some((self.latency, MemRequest::Load(req.clone())));
+                if !self.curr_reqs.iter().any(|(_req, delay)| *delay > 0) {
+                    if let Some(next_req) = self.reqs.pop_front() {
+                        self.curr_reqs.insert(next_req, self.latency);
+                        self.reqs.push_back(mem_req);
+                    } else {
+                        self.curr_reqs.insert(mem_req, self.latency);
+                    }
+                } else {
+                    self.reqs.push_back(mem_req);
+                }
             }
         }
 
@@ -148,9 +160,12 @@ impl MemoryLevel {
 
     /// Decrements the latency count for the pending request
     pub fn update_clock(&mut self) {
-        if let Some((ref mut latency, _req)) = &mut self.curr_req {
+        for (req, latency) in self.curr_reqs.iter_mut() {
             *latency = latency.saturating_sub(1);
         }
+        // if let Some((ref mut latency, _req)) = &mut self.curr_req {
+        //     *latency = latency.saturating_sub(1);
+        // }
     }
 
     /// Returns the latency in clock cycles
