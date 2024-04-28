@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use log::{error, info};
 
@@ -1106,6 +1106,8 @@ impl System {
         self.pipeline_writeback()
     }
 
+    // BUG: Memory requests further down in the pipeline conflict with fetch, causes
+    // deadlock (make finished requests a hashset instead of a single optional?)
     #[allow(clippy::too_many_lines)] // TODO: Fix this later..
     fn pipeline_fetch(&mut self, decode_blocked: bool) -> PipelineStageStatus {
         info!(
@@ -1164,22 +1166,22 @@ impl System {
                                     0
                                 }
                             };
+                            error!("GOT HERE: {decode_blocked}");
                             if decode_blocked {
-                                // BUG: Blocking because of this set?
                                 info!("Pipeline::Fetch: Fetched instruction, decode is blocked, saving for next cycle");
                                 self.fetch.raw_instr = Some(raw);
                                 self.fetch.src_addr = Some(fetch_addr);
                                 PipelineStageStatus::Noop
                             } else {
-                                let decoded =
+                                let fetched =
                                     PipelineStageStatus::Instruction(PipelineInstruction {
                                         src_addr: Some(fetch_addr),
                                         raw_instr: Some(raw),
                                         decode_instr: None,
                                         instr_result: PipelineInstructionResult::Empty,
                                     });
-                                info!("Pipeline::Fetch: Passing on raw instruction: {:?}", decoded);
-                                decoded
+                                info!("Pipeline::Fetch: Passing on raw instruction: {:?}", fetched);
+                                fetched
                             }
                         } else {
                             error!("Pipeline::Fetch: Received empty memory response, treating as a NOOP");
@@ -1917,8 +1919,9 @@ impl System {
         if mem_blocked {
             //info!("Pipeline::Execute: Returning Stall"); // try returning a NOOP if memory is
             // stalled instead?
+            info!("Calling decode with blocked status");
+            self.pipeline_decode(mem_blocked);
             info!("Pipeline::Execute: Returning Noop");
-            //PipelineStageStatus::Stall
             PipelineStageStatus::Noop
         } else {
             let completed_instr = self.execute; // TODO: Fill in result for this...
