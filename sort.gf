@@ -23,7 +23,6 @@ MULU R1, R1, R3 // R1 <- n * 32 (length of array in bits)
 ADDU R1, R0, R1
 SUBU R1, R1, R3
 SUBU R1, R1, R3 // R1 now holds the address of the 2nd to last entry
-// BUG HERE, R1 is past the end 
 
 XORI R3, R3, R3
 
@@ -46,18 +45,20 @@ OUTER_LOOP:
         ADDIM R4, 32 // R4 <- &data[j+1]
         // load values pointed to by R3 and R4 
         // into R6 and R7, compare, then branch accordingly
-        LDIN32 R6, R3 // R6 <- &data[j]
-        LDIN32 R7, R4 // R7 <- &data[j+1]
+        LDIN32 R6, R3 // R6 <- data[j]
+        LDIN32 R7, R4 // R7 <- data[j+1]
 
         CMP32 R6, R7
         JLTE INNER_LOOP_END // if they're already in order, don't swap
-        STIN32 R7, R3 // swap - BUG HERE
+        STIN32 R7, R3 // swap
         STIN32 R6, R4 // ^
 
         INNER_LOOP_END:
             ADDIM R3, 32 // j++
-            CMP32 R3, R5 // check termination condition
-            JLT INNER_LOOP
+            //CMP32 R3, R5 // check termination condition
+            CMP32 R3, R1
+            //JLT INNER_LOOP
+            JLTE INNER_LOOP
 
 
     ADDIM R2, 32 // i++

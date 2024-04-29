@@ -137,7 +137,9 @@ impl Instruction {
                 }
                 _ => Vec::new(),
             },
-            Instruction::Type1 { .. } => Vec::new(),
+            Instruction::Type1 { .. } => {
+                vec![(RegisterGroup::Flag, 0)]
+            }
             Instruction::Type2 {
                 opcode,
                 reg_1,
@@ -169,7 +171,7 @@ impl Instruction {
                 reg_1,
                 immediate: _,
             } => match opcode {
-                6..=8 => {
+                6..=9 => {
                     vec![(RegisterGroup::General, *reg_1)]
                 }
                 _ => Vec::new(),

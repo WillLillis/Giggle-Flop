@@ -62,6 +62,7 @@ pub enum FlagIndex {
 
 /// Returns the set of flag values resulting from a comparison of the two values
 pub fn get_comparison_flags(reg_1: Register, reg_2: Register) -> [Option<bool>; FLAG_COUNT] {
+    error!("Comparing {:?} and {:?}", reg_1, reg_2);
     let mut flags = [None; FLAG_COUNT];
     flags[FlagIndex::EQ as usize] = Some(reg_1 == reg_2);
     flags[FlagIndex::LT as usize] = Some(reg_1 < reg_2);
@@ -69,6 +70,7 @@ pub fn get_comparison_flags(reg_1: Register, reg_2: Register) -> [Option<bool>; 
     // No overflow with comparisons...
     // No sign with comparisons...
     // No zero with comparisons...
+    error!("Comparison result: {:?}", flags);
 
     flags
 }

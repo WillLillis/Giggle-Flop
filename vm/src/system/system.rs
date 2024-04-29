@@ -1284,22 +1284,16 @@ impl System {
             // instruction missing operands OR execute is blocked
             (_, true) => {
                 info!("Pipeline::Decode: Calling fetch with blocked status");
-                // BUG: Later stages incorrectly get stuck in blocked state, we ignore every
-                // instruction coming out of fetch...
                 self.pipeline_fetch(true); // shouldn't get anything back because we're blocked...
                 info!("Pipeline::Decode: Passing on a Noop status");
                 PipelineStageStatus::Noop
             }
             (true, _) => {
                 info!("Pipeline::Decode: Calling fetch with blocked status");
-                // BUG: Later stages incorrectly get stuck in blocked state, we ignore every
-                // instruction coming out of fetch...
                 self.pipeline_fetch(true); // shouldn't get anything back because we're blocked...
                 info!("Pipeline::Decode: Passing on a Noop status");
                 PipelineStageStatus::Noop
             }
-            // BUG: somehow this is bad, dependent instructions are being dropped?
-            // instruction has operands, execute not blocked
             (false, false) => {
                 let completed_instr = if PipelineStageStatus::Stall == self.decode {
                     info!("Pipeline::Decode: Translating Stall to Noop");
@@ -1307,12 +1301,7 @@ impl System {
                 } else {
                     self.decode
                 };
-                info!("Pipeline::Decode: Calling fetch with unblocked status");
-                self.decode = self.pipeline_fetch(false);
-                info!(
-                    "Pipeline::Decode: Instruction saved for next decode: {:?}",
-                    self.decode
-                );
+                // BUG: dependencies not properly observed, not sure why
                 if let PipelineStageStatus::Instruction(instr) = completed_instr {
                     if let Some(reg) = instr.get_dest_reg() {
                         info!(
@@ -1323,6 +1312,12 @@ impl System {
                         error!("Adding {:?} to pending registers", reg);
                     }
                 }
+                info!("Pipeline::Decode: Calling fetch with unblocked status");
+                self.decode = self.pipeline_fetch(false);
+                info!(
+                    "Pipeline::Decode: Instruction saved for next decode: {:?}",
+                    self.decode
+                );
                 info!(
                     "Pipeline::Decode: Returning decoded instruction {:?} to execute",
                     completed_instr
@@ -1917,8 +1912,6 @@ impl System {
         }
 
         if mem_blocked {
-            //info!("Pipeline::Execute: Returning Stall"); // try returning a NOOP if memory is
-            // stalled instead?
             info!("Calling decode with blocked status");
             self.pipeline_decode(mem_blocked);
             info!("Pipeline::Execute: Returning Noop");
@@ -2140,8 +2133,9 @@ impl System {
                         self.pending_reg.remove(&(RegisterGroup::General, RET_REG));
                     }
                     PipelineInstructionResult::Flag { flags } => {
-                        info!(
-                            "Pipeline::Writeback: Instruction has flag result: {:?}",
+                        error!(
+                            "Pipeline::Writeback: Instruction {} has flag result: {:?}",
+                            instr.decode_instr.unwrap(),
                             flags
                         );
                         // TODO: Handle this...
@@ -2209,6 +2203,7 @@ impl System {
         self.decode = PipelineStageStatus::Noop;
         self.fetch = FetchState::default();
         self.memory_system.clear_reqs();
+        self.pending_reg.clear();
     }
 
     // TODO: do this???
