@@ -15,7 +15,7 @@
 LD32 R1, 1152 // R1 <- n
 
 // Load start address into R0
-ADDIM R0, 1184 // 640 + 32
+ADDIM R0, 1184 // 1152 + 32
 
 // Load the stop address into R1
 ADDIM R3, 32
@@ -63,5 +63,5 @@ OUTER_LOOP:
 
     ADDIM R2, 32 // i++
     CMP32 R2, R1
-    JLT OUTER_LOOP
+    JLTE OUTER_LOOP
     HALT

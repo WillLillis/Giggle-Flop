@@ -187,8 +187,11 @@ impl GiggleFlopUI {
                 self.system
                     .load_program(PathBuf::from_str("test_bin").unwrap());
                 let mut addr = 1152;
-                let data_len = MemBlock::Unsigned32(3);
+                let data_len = MemBlock::Unsigned32(4);
                 self.system.memory_system.force_store(addr, data_len);
+                addr += MEM_BLOCK_WIDTH;
+                let data = MemBlock::Unsigned32(3);
+                self.system.memory_system.force_store(addr, data);
                 addr += MEM_BLOCK_WIDTH;
                 let data = MemBlock::Unsigned32(2);
                 self.system.memory_system.force_store(addr, data);
