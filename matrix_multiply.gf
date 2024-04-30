@@ -18,16 +18,16 @@
 // Arbitrarily start at address 1152...
 
 // Get the rows of first matrix
-LD32 R0, 1152 // R0 <- r
+LD32 R0, 2304 // R0 <- r
 
 // Get the columns of the second matrix
-LD32 R1, 1184 // R1 <- c
+LD32 R1, 2336 // R1 <- c
 
 //Get the columns of first matrix and rows of second matrix
-LD32 R2, 1216 // R2 <- k
+LD32 R2, 2368 // R2 <- k
 
 XORI R15, R15, R15
-ADDIM R15, 1152
+ADDIM R15, 2304
 // Calculate the sizes of matrices 1, 2, and 3
 LDIN32 R3, R15        // R3 <- Rows of matrix 1
 ADDIM R15, 32
