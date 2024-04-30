@@ -26,19 +26,24 @@ LD32 R1, 1184 // R1 <- c
 //Get the columns of first matrix and rows of second matrix
 LD32 R2, 1216 // R2 <- k
 
-
+XORI R15, R15, R15
+ADDIM R15, 1152
 // Calculate the sizes of matrices 1, 2, and 3
-LD32 R3, R0        // R3 <- Rows of matrix 1
-LD32 R4, R1        // R4 <- Columns of matrix 2
-LD32 R5, R2        // R5 <- Columns of matrix 1 and rows of matrix 2
+LDIN32 R3, R15        // R3 <- Rows of matrix 1
+ADDIM R15, 32
+LDIN32 R4, R15        // R4 <- Columns of matrix 2
+ADDIM R15, 32
+LDIN32 R5, R15        // R5 <- Columns of matrix 1 and rows of matrix 2
 
 // Calculate the sizes of matrices in words
-MULI R3, R5, 32     // R3 <- Size of matrix 1 in bytes
-MULI R5, R4, 32     // R5 <- Size of matrix 2 in bytes
+XORI R15, R15, R15
+ADDIM R15, 32
+MULU R3, R5, R15     // R3 <- Size of matrix 1 in bytes
+MULU R5, R4, R15     // R5 <- Size of matrix 2 in bytes
 ADDU R3, R3, R5    // R3 <- Total size of matrices 1 and 2 in bytes
 
 // Load the address of the first matrix into R6
-ADDIM R6, R2, 32   // Address of the first matrix
+ADDU R6, R2, R15   // Address of the first matrix
 
 // Load the address of the second matrix into R7
 ADDU R7, R6, R3    // Address of the second matrix
@@ -59,43 +64,41 @@ mul_loop:
     // Load the current value from matrix 1
     // LDIN32 R12, [R6 + R9 * R4 * 32 + R11 * 32]
     // does this work?
-    MULI R12, R4, 32
-    MULI R12, R12, R9
-    ADDI R12, R12, R6
+    MULU R12, R4, R15
+    MULU R12, R12, R9
+    ADDU R12, R12, R6
 
-    MULI R13, R11, 32
-    ADDI R12, R12, R13
-    LDIN32 R12, R12
+    MULU R13, R11, R15
+    ADDU R12, R12, R13
 
     // Load the current value from matrix 2
     // LDIN32 R13, [R7 + R11 * R4 * 32 + R10 * 32]
     // does this work?
-    MULI R13, R4, 32
-    MULI R13, R13, R11
-    ADDI R13, R13, R7
+    MULU R13, R4, R15
+    MULU R13, R13, R11
+    ADDU R13, R13, R7
 
-    MULI R14, R10, 32
-    ADDI R13, R12, R14
-    LDIN32 R13, R13
+    MULI R14, R10, R15
+    ADDU R13, R12, R14
 
     // Multiply and accumulate
     MULU R14, R12, R13
 
     // Store the result to matrix 3
     // STIN32 [R8 + R9 * R4 * 32 + R10 * 32], R14
-    MULI R12, R4, 32
-    MULI R12, R13, R9
-    ADDI R13, R13, R8
+    MULU R12, R4, R15
+    MULU R12, R13, R9
+    ADDU R13, R13, R8
 
-    MULI R14, R10, 32
-    ADDI R13, R12, R14
+    MULU R14, R10, R15
+    ADDU R13, R12, R14
     STIN32 R13, R14
 
     // Increment loop counter for matrix 1 columns and matrix 2 rows
     ADDIM R11, 32
 
     // Check loop condition for loop 3
-    CMP R11, R2
+    CMP32 R11, R2
     JLTE mul_loop
 
     // Move to the next column of matrix 2
