@@ -187,10 +187,10 @@ impl GiggleFlopUI {
                 self.system
                     .load_program(PathBuf::from_str("demo_bin").unwrap());
                 let mut addr = 2304;
-                let data = MemBlock::Unsigned32(1);
+                let data = MemBlock::Unsigned32(2);
                 self.system.memory_system.force_store(addr, data);
                 addr += MEM_BLOCK_WIDTH;
-                let data = MemBlock::Unsigned32(1);
+                let data = MemBlock::Unsigned32(2);
                 self.system.memory_system.force_store(addr, data);
                 addr += MEM_BLOCK_WIDTH;
                 let data = MemBlock::Unsigned32(1);
@@ -200,6 +200,12 @@ impl GiggleFlopUI {
                 self.system.memory_system.force_store(addr, data);
                 addr += MEM_BLOCK_WIDTH;
                 let data = MemBlock::Unsigned32(4);
+                self.system.memory_system.force_store(addr, data);
+                addr += MEM_BLOCK_WIDTH;
+                let data = MemBlock::Unsigned32(5);
+                self.system.memory_system.force_store(addr, data);
+                addr += MEM_BLOCK_WIDTH;
+                let data = MemBlock::Unsigned32(6);
                 self.system.memory_system.force_store(addr, data);
             }
             Message::LineClicked(addr) => {
