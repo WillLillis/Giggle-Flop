@@ -76,10 +76,13 @@ impl MemoryLevel {
     /// Issues a new load request, or checks the status of an existing (matching)
     /// load request
     pub fn load(&mut self, req: &LoadRequest) -> MemResponse {
+        // this is bad, not actual address...
         let address = req.address % (self.contents.len() * self.line_len * MEM_BLOCK_WIDTH);
         let line_idx = self.address_index(address);
+        info!("Queue: {:?}", self.reqs);
 
-        if !self.is_main && !self.contents[line_idx].contains_address(address) {
+        //if !self.is_main && !self.contents[line_idx].contains_address(address) {
+        if !self.is_main && !self.contents[line_idx].contains_address(req.address) {
             return MemResponse::Miss;
         }
         let mem_req = MemRequest::from(req.clone());
@@ -104,15 +107,23 @@ impl MemoryLevel {
                 info!("Request pending: {delay} cycles left");
             }
             None => {
+                info!("New load request, inserting");
                 if !self.curr_reqs.iter().any(|(_req, delay)| *delay > 0) {
                     if let Some(next_req) = self.reqs.pop_front() {
                         self.curr_reqs.insert(next_req, self.latency);
                         self.reqs.push_back(mem_req);
+                        info!("Other pending requests, new load request inserted into queue");
                     } else {
                         self.curr_reqs.insert(mem_req, self.latency);
+                        info!("New load request is being servied");
                     }
                 } else {
-                    self.reqs.push_back(mem_req);
+                    if !self.reqs.contains(&mem_req) {
+                        self.reqs.push_back(mem_req);
+                        info!("New load request inserted into queue");
+                    } else {
+                        info!("Load request already in queue");
+                    }
                 }
             }
         }

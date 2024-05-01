@@ -184,29 +184,41 @@ impl GiggleFlopUI {
             Message::LoadProgram => {
                 // TODO: Fill in later...
                 self.system.reset();
+                // self.system
+                //     .load_program(PathBuf::from_str("demo_bin").unwrap());
+                // let mut addr = 2304;
+                // let data = MemBlock::Unsigned32(2);
+                // self.system.memory_system.force_store(addr, data);
+                // addr += MEM_BLOCK_WIDTH;
+                // let data = MemBlock::Unsigned32(2);
+                // self.system.memory_system.force_store(addr, data);
+                // addr += MEM_BLOCK_WIDTH;
+                // let data = MemBlock::Unsigned32(1);
+                // self.system.memory_system.force_store(addr, data);
+                // addr += MEM_BLOCK_WIDTH;
+                // let data = MemBlock::Unsigned32(3);
+                // self.system.memory_system.force_store(addr, data);
+                // addr += MEM_BLOCK_WIDTH;
+                // let data = MemBlock::Unsigned32(4);
+                // self.system.memory_system.force_store(addr, data);
+                // addr += MEM_BLOCK_WIDTH;
+                // let data = MemBlock::Unsigned32(5);
+                // self.system.memory_system.force_store(addr, data);
+                // addr += MEM_BLOCK_WIDTH;
+                // let data = MemBlock::Unsigned32(6);
+                // self.system.memory_system.force_store(addr, data);
                 self.system
-                    .load_program(PathBuf::from_str("demo_bin").unwrap());
-                let mut addr = 2304;
-                let data = MemBlock::Unsigned32(2);
-                self.system.memory_system.force_store(addr, data);
+                    .load_program(PathBuf::from_str("test_bin").unwrap());
+                let mut addr = 1152;
+                let len = 10;
+                let data_len = MemBlock::Unsigned32(len as u32);
+                self.system.memory_system.force_store(addr, data_len);
                 addr += MEM_BLOCK_WIDTH;
-                let data = MemBlock::Unsigned32(2);
-                self.system.memory_system.force_store(addr, data);
-                addr += MEM_BLOCK_WIDTH;
-                let data = MemBlock::Unsigned32(1);
-                self.system.memory_system.force_store(addr, data);
-                addr += MEM_BLOCK_WIDTH;
-                let data = MemBlock::Unsigned32(3);
-                self.system.memory_system.force_store(addr, data);
-                addr += MEM_BLOCK_WIDTH;
-                let data = MemBlock::Unsigned32(4);
-                self.system.memory_system.force_store(addr, data);
-                addr += MEM_BLOCK_WIDTH;
-                let data = MemBlock::Unsigned32(5);
-                self.system.memory_system.force_store(addr, data);
-                addr += MEM_BLOCK_WIDTH;
-                let data = MemBlock::Unsigned32(6);
-                self.system.memory_system.force_store(addr, data);
+                for val in (0..len).rev() {
+                    let data = MemBlock::Unsigned32(val);
+                    self.system.memory_system.force_store(addr, data);
+                    addr += MEM_BLOCK_WIDTH;
+                }
             }
             Message::LineClicked(addr) => {
                 if !self.breakpoints.remove(&addr) {

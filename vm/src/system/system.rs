@@ -90,8 +90,8 @@ impl System {
         Self {
             clock: 0,
             pending_reg: HashSet::new(),
-            memory_system: Memory::new(4, &[32, 256], &[1, 2]),
-            should_use_pipeline: true,
+            memory_system: Memory::new(4, &[256], &[100]),
+            should_use_pipeline: false,
             registers: RegisterSet::new(),
             fetch: FetchState::default(),
             decode: PipelineStageStatus::Noop,
@@ -113,7 +113,8 @@ impl System {
 
         self.clock = 0;
         self.pending_reg.clear();
-        self.memory_system = Memory::new(4, &capacities, &latencies);
+        self.memory_system =
+            Memory::new(self.memory_system.get_line_len(), &capacities, &latencies);
         self.registers = RegisterSet::new();
         self.fetch = FetchState::default();
         self.decode = PipelineStageStatus::Noop;
@@ -419,16 +420,17 @@ impl System {
                 }
                 //LDIN8
                 3 => {
-                    let address = self.registers.general[reg_2]
-                        .data
-                        .force_unsigned()
-                        .try_into()
+                    let address =
+                        usize::try_from(self.registers.general[reg_2].data.force_unsigned())
+                            .unwrap_or_default();
+                    // let req = MemRequest::Load(LoadRequest {
+                    //     issuer: PipelineStage::Execute,
+                    //     address,
+                    //     width: MemType::Unsigned8,
+                    // });
+                    let req = decoded_instr
+                        .get_mem_req(Some(PipelineStage::Execute), &self.registers.general)
                         .unwrap();
-                    let req = MemRequest::Load(LoadRequest {
-                        issuer: PipelineStage::Execute,
-                        address,
-                        width: MemType::Unsigned8,
-                    });
                     let resp = self.memory_system.request(&req);
                     if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
                         let block_data = data.get_contents(address).unwrap();
@@ -451,16 +453,17 @@ impl System {
                 }
                 //LDIN16
                 4 => {
-                    let address = self.registers.general[reg_2]
-                        .data
-                        .force_unsigned()
-                        .try_into()
+                    let address =
+                        usize::try_from(self.registers.general[reg_2].data.force_unsigned())
+                            .unwrap_or_default();
+                    // let req = MemRequest::Load(LoadRequest {
+                    //     issuer: PipelineStage::Execute,
+                    //     address,
+                    //     width: MemType::Unsigned16,
+                    // });
+                    let req = decoded_instr
+                        .get_mem_req(Some(PipelineStage::Execute), &self.registers.general)
                         .unwrap();
-                    let req = MemRequest::Load(LoadRequest {
-                        issuer: PipelineStage::Execute,
-                        address,
-                        width: MemType::Unsigned16,
-                    });
                     let resp = self.memory_system.request(&req);
                     if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
                         let block_data = data.get_contents(address).unwrap();
@@ -483,16 +486,17 @@ impl System {
                 }
                 //LDIN32
                 5 => {
-                    let address = self.registers.general[reg_2]
-                        .data
-                        .force_unsigned()
-                        .try_into()
+                    let address =
+                        usize::try_from(self.registers.general[reg_2].data.force_unsigned())
+                            .unwrap_or_default();
+                    // let req = MemRequest::Load(LoadRequest {
+                    //     issuer: PipelineStage::Execute,
+                    //     address,
+                    //     width: MemType::Unsigned32,
+                    // });
+                    let req = decoded_instr
+                        .get_mem_req(Some(PipelineStage::Execute), &self.registers.general)
                         .unwrap();
-                    let req = MemRequest::Load(LoadRequest {
-                        issuer: PipelineStage::Execute,
-                        address,
-                        width: MemType::Unsigned32,
-                    });
                     let resp = self.memory_system.request(&req);
                     if let Ok(MemResponse::Load(LoadResponse { data })) = resp {
                         let block_data = data.get_contents(address).unwrap();
@@ -627,11 +631,7 @@ impl System {
             } => match opcode {
                 // LD8
                 0 => {
-                    let address = self.registers.general[reg_1]
-                        .data
-                        .force_unsigned()
-                        .try_into()
-                        .unwrap();
+                    let address = usize::try_from(immediate).unwrap();
                     let req = MemRequest::Load(LoadRequest {
                         issuer: PipelineStage::Execute,
                         address,
@@ -659,11 +659,7 @@ impl System {
                 }
                 // LD16
                 1 => {
-                    let address = self.registers.general[reg_1]
-                        .data
-                        .force_unsigned()
-                        .try_into()
-                        .unwrap();
+                    let address = usize::try_from(immediate).unwrap();
                     let req = MemRequest::Load(LoadRequest {
                         issuer: PipelineStage::Execute,
                         address,
@@ -691,11 +687,7 @@ impl System {
                 }
                 // LD32
                 2 => {
-                    let address = self.registers.general[reg_1]
-                        .data
-                        .force_unsigned()
-                        .try_into()
-                        .unwrap();
+                    let address = usize::try_from(immediate).unwrap();
                     let req = MemRequest::Load(LoadRequest {
                         issuer: PipelineStage::Execute,
                         address,

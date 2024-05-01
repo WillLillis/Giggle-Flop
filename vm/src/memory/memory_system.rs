@@ -155,6 +155,10 @@ impl Memory {
         mem
     }
 
+    pub fn get_line_len(&self) -> usize {
+        self.line_len
+    }
+
     /// Clears *ALL* request queues and pending results
     /// Used along with a squash in the pipeline
     pub fn clear_reqs(&mut self) {
@@ -299,7 +303,12 @@ impl Memory {
                         main_mem.curr_reqs.insert(mem_req, main_mem.latency());
                     }
                 } else {
-                    main_mem.reqs.push_back(mem_req);
+                    if !main_mem.reqs.contains(&mem_req) {
+                        main_mem.reqs.push_back(mem_req);
+                        info!("New load request inserted into queue");
+                    } else {
+                        info!("Load request already in queue");
+                    }
                 }
             }
         }
