@@ -184,8 +184,8 @@ impl GiggleFlopUI {
             Message::LoadProgram => {
                 // TODO: Fill in later...
                 self.system.reset();
-                // self.system
-                //     .load_program(PathBuf::from_str("demo_bin").unwrap());
+                self.system
+                    .load_program(PathBuf::from_str("linked_list").unwrap());
                 // let mut addr = 2304;
                 // let data = MemBlock::Unsigned32(2);
                 // self.system.memory_system.force_store(addr, data);
@@ -207,18 +207,18 @@ impl GiggleFlopUI {
                 // addr += MEM_BLOCK_WIDTH;
                 // let data = MemBlock::Unsigned32(6);
                 // self.system.memory_system.force_store(addr, data);
-                self.system
-                    .load_program(PathBuf::from_str("test_bin").unwrap());
-                let mut addr = 1152;
-                let len = 10;
-                let data_len = MemBlock::Unsigned32(len as u32);
-                self.system.memory_system.force_store(addr, data_len);
-                addr += MEM_BLOCK_WIDTH;
-                for val in (0..len).rev() {
-                    let data = MemBlock::Unsigned32(val);
-                    self.system.memory_system.force_store(addr, data);
-                    addr += MEM_BLOCK_WIDTH;
-                }
+                // self.system
+                //     .load_program(PathBuf::from_str("test_bin").unwrap());
+                // let mut addr = 1152;
+                // let len = 10;
+                // let data_len = MemBlock::Unsigned32(len as u32);
+                // self.system.memory_system.force_store(addr, data_len);
+                // addr += MEM_BLOCK_WIDTH;
+                // for val in (0..len).rev() {
+                //     let data = MemBlock::Unsigned32(val);
+                //     self.system.memory_system.force_store(addr, data);
+                //     addr += MEM_BLOCK_WIDTH;
+                // }
             }
             Message::LineClicked(addr) => {
                 if !self.breakpoints.remove(&addr) {
@@ -257,8 +257,8 @@ impl GiggleFlopUI {
                     .padding(10)
                     .on_press(Message::AdvanceInstruction)
             };
-            let pipeline_checkbox =
-                || checkbox("Use Pipeline", self.use_pipeline).on_toggle(Message::UsePipeline);
+            // let pipeline_checkbox =
+            //     || checkbox("Use Pipeline", self.use_pipeline).on_toggle(Message::UsePipeline);
             let clock_text = format!("Clock: {}", self.system.clock);
             Scrollable::with_direction(
                 row![
@@ -267,7 +267,7 @@ impl GiggleFlopUI {
                     run_button(),
                     load_button(),
                     skip_instruction_button(),
-                    pipeline_checkbox(),
+                    // pipeline_checkbox(),
                 ]
                 .align_items(Alignment::Center)
                 .padding([0, 0, 0, 0])
