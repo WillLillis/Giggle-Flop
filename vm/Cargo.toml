@@ -9,11 +9,9 @@ name = "giggle_flop"
 [dependencies]
 anyhow = "1.0.80"
 bitmaps = "3.2.1"
-cfonts = "1.1.4"
 flexi_logger = "0.27.4"
 iced = { git = "https://github.com/iced-rs/iced.git", rev = "5071e3d", features = ["tokio"] }
 log = "0.4.21"
 once_cell = "1.19.0"
-rand = "0.8.5"
 strum = { version = "0.26.2", features = ["strum_macros", "derive"] }
 strum_macros = "0.26.2"
