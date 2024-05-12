@@ -90,7 +90,7 @@ impl System {
         Self {
             clock: 0,
             pending_reg: HashSet::new(),
-            memory_system: Memory::new(4, &[32, 256], &[1, 2]),
+            memory_system: Memory::new(4, &[32, 64, 256], &[1, 10, 100]),
             should_use_pipeline: false,
             registers: RegisterSet::new(),
             fetch: FetchState::default(),

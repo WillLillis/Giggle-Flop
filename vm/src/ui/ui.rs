@@ -214,7 +214,7 @@ impl GiggleFlopUI {
                 //     self.system.memory_system.force_store(addr, data);
                 //     addr += MEM_BLOCK_WIDTH;
                 // }
-                let len = 10;
+                let len = 100;
                 let mut addr = 1152;
                 for val in (0..len).rev() {
                     // store the value

@@ -104,13 +104,13 @@ impl Instruction {
             }
             Instruction::Type4 {
                 opcode,
-                reg_1: _,
+                reg_1,
                 immediate,
             } => {
                 let mem_type = match opcode {
-                    0 => MemType::Unsigned8,
-                    1 => MemType::Unsigned16,
-                    2 => MemType::Unsigned32,
+                    0 | 6 => MemType::Unsigned8,
+                    1 | 7 => MemType::Unsigned16,
+                    2 | 8 => MemType::Unsigned32,
                     3 => MemType::Signed8,
                     4 => MemType::Signed16,
                     5 => MemType::Signed32,
@@ -118,11 +118,19 @@ impl Instruction {
                         return None;
                     }
                 };
-                Some(MemRequest::Load(LoadRequest {
-                    issuer: issuer.unwrap_or_default(),
-                    address: *immediate as usize,
-                    width: mem_type,
-                }))
+                if *opcode <= 5 {
+                    Some(MemRequest::Load(LoadRequest {
+                        issuer: issuer.unwrap_or_default(),
+                        address: *immediate as usize,
+                        width: mem_type,
+                    }))
+                } else {
+                    Some(MemRequest::Store(StoreRequest {
+                        issuer: issuer.unwrap_or_default(),
+                        address: *immediate as usize,
+                        data: gen_regs[*reg_1].data,
+                    }))
+                }
             }
             _ => None,
         }
