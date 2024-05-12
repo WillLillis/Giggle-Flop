@@ -48,11 +48,10 @@ enum Message {
     SelectRegisterGroup(RegisterGroup),
     AdvanceClock,
     RunProgram,
-    AdvanceInstruction,
-    UsePipeline(bool),
     LoadProgram,
     LineClicked(u32),
     EventOccurred(Event),
+    // UsePipeline(bool),
     // maybe delete
     Clicked(pane_grid::Pane),
     Resized(pane_grid::ResizeEvent),
@@ -72,7 +71,7 @@ impl Pane {
 // BUG: LD32 isn't grabbing from memory correctly
 impl GiggleFlopUI {
     fn new() -> Self {
-        let mut system = System::default();
+        let system = System::default();
         let memory_levels = (0..system.memory_system.num_levels()).collect();
         let register_groups = {
             let mut groups = Vec::new();
@@ -172,15 +171,11 @@ impl GiggleFlopUI {
                 // TODO: Check for other file events, maybe some different actions for them?
                 // e.g. hover, hover left, etc.
             }
-            Message::AdvanceInstruction => {
-                // TODO: this
-                // does this need to be a thing?
-            }
-            Message::UsePipeline(val) => {
-                // TODO: this
-                self.system.reset();
-                self.use_pipeline = val;
-            }
+            // Message::UsePipeline(val) => {
+            //     // TODO: this
+            //     self.system.reset();
+            //     self.use_pipeline = val;
+            // }
             Message::LoadProgram => {
                 // TODO: Fill in later...
                 self.system.reset();
@@ -209,15 +204,31 @@ impl GiggleFlopUI {
                 // self.system.memory_system.force_store(addr, data);
                 self.system
                     .load_program(PathBuf::from_str("test_bin").unwrap());
-                let mut addr = 1152;
+                // let mut addr = 1152;
+                // let len = 10;
+                // let data_len = MemBlock::Unsigned32(len as u32);
+                // self.system.memory_system.force_store(addr, data_len);
+                // addr += MEM_BLOCK_WIDTH;
+                // for val in (0..len).rev() {
+                //     let data = MemBlock::Unsigned32(val);
+                //     self.system.memory_system.force_store(addr, data);
+                //     addr += MEM_BLOCK_WIDTH;
+                // }
                 let len = 10;
-                let data_len = MemBlock::Unsigned32(len as u32);
-                self.system.memory_system.force_store(addr, data_len);
-                addr += MEM_BLOCK_WIDTH;
+                let mut addr = 1152;
                 for val in (0..len).rev() {
+                    // store the value
                     let data = MemBlock::Unsigned32(val);
                     self.system.memory_system.force_store(addr, data);
+                    // store the next pointer
                     addr += MEM_BLOCK_WIDTH;
+                    let next = if val > 0 {
+                        MemBlock::Unsigned32(addr as u32 + MEM_BLOCK_WIDTH as u32 * 4)
+                    } else {
+                        MemBlock::Unsigned32(0)
+                    };
+                    self.system.memory_system.force_store(addr, next);
+                    addr += MEM_BLOCK_WIDTH * 4;
                 }
             }
             Message::LineClicked(addr) => {
@@ -254,15 +265,10 @@ impl GiggleFlopUI {
             };
             let clock_text = format!("Clock: {}", self.system.clock);
             Scrollable::with_direction(
-                row![
-                    text(clock_text),
-                    step_button(),
-                    run_button(),
-                    load_button(),
-                ]
-                .align_items(Alignment::Center)
-                .padding([0, 0, 0, 0])
-                .spacing(20),
+                row![text(clock_text), step_button(), run_button(), load_button(),]
+                    .align_items(Alignment::Center)
+                    .padding([0, 0, 0, 0])
+                    .spacing(20),
                 {
                     let properties = Properties::new()
                         .width(10)

@@ -90,6 +90,11 @@ impl MemoryLevel {
             Some(0) => {
                 info!("Load request completed, request: {:?}", mem_req);
                 let data = self.contents[line_idx].clone();
+                if !data.contains_address(req.address) {
+                    info!("Cache line removed since request was issued.");
+                    return MemResponse::Miss;
+
+                }
 
                 self.curr_reqs.remove(&mem_req);
                 if !self.curr_reqs.iter().any(|(_req, delay)| *delay > 0) {
