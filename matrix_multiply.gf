@@ -18,16 +18,16 @@
 // Arbitrarily start at address 2304...
 
 // Get the rows of first matrix
-LD32 R0, 2304 // R0 <- r
+LD32 R0, 2432 // R0 <- r
 
 // Get the columns of the second matrix
-LD32 R1, 2336 // R1 <- c
+LD32 R1, 2464 // R1 <- c
 
 //Get the columns of first matrix and rows of second matrix
-LD32 R2, 2368 // R2 <- k
+LD32 R2, 2496 // R2 <- k
 
 XORI R15, R15, R15
-ADDIM R15, 2304
+ADDIM R15, 2432
 // Calculate the sizes of matrices 1, 2, and 3
 LDIN32 R3, R15        // R3 <- Rows of matrix 1
 ADDIM R15, 32
@@ -46,7 +46,7 @@ MULU R4, R4, R15     // R4 <- Size of matrix 2 in bits
 ADDU R5, R3, R4    // R5 <- Total size of matrices 1 and 2 in bits
 
 XORI R9, R9, R9
-ADDIM R9, 2304      // Get start address again
+ADDIM R9, 2432      // Get start address again
 // Load the address of the first matrix into R6
 ADDIM R10, 96
 ADDU R6, R9, R10   // Address of the first matrix
@@ -59,6 +59,10 @@ ADDU R8, R7, R4    // Address of the third matrix
 
 // Loop to populate matrices 1, 2, and 3
 // Loop_1: Iterate over rows of matrix 1
+XORI R4, R4, R4
+XORI R3, R3, R3
+ADDIM R3, 2336     // Guaranteed to be 0xFFFFFFFF
+LDIN32 R3, R3     
 XORI R9, R9, R9     // Initialize row counter for matrix 1
 outer_loop:
     // Loop_2: Iterate over columns of matrix 2
@@ -98,7 +102,7 @@ mul_loop:
     LDIN32 R13, R13
 
     // Multiply and accumulate
-    MULU R14, R12, R13
+    MULU R4, R12, R13
 
     // Store the result to matrix 3
     // STIN32 [R8 + R9 * R0 * 32 + R10 * 32], R14
@@ -108,7 +112,14 @@ mul_loop:
 
     MULU R13, R10, R15
     ADDU R13, R13, R12
-    STIN32 R14, R13
+    LDIN32 R5, R13
+    CMP32 R5, R3    // check for 0xFFFFFFFF
+    JNE continue_loop
+    XORI R5, R5, R5
+
+continue_loop:
+    ADDU R4, R4, R5
+    STIN32 R4, R13
 
     // Increment loop counter for matrix 1 columns and matrix 2 rows
     ADDIM R11, 1
@@ -133,3 +144,4 @@ mul_loop:
 
     // If we've reached here, matrices 1, 2, and 3 are populated
     HALT
+    
