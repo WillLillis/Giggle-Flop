@@ -59,7 +59,7 @@ enum Message {
 
 #[derive(Clone, Copy)]
 struct Pane {
-    // TODO: Add data in here as necessary...
+    // Add data in here as necessary...
 }
 
 impl Pane {
@@ -68,7 +68,6 @@ impl Pane {
     }
 }
 
-// BUG: LD32 isn't grabbing from memory correctly
 impl GiggleFlopUI {
     fn new() -> Self {
         let system = System::default();
@@ -168,21 +167,17 @@ impl GiggleFlopUI {
                 if let Event::Window(_id, window::Event::FileDropped(path)) = event {
                     self.system.load_program(path);
                 }
-                // TODO: Check for other file events, maybe some different actions for them?
+                // NOTE: Check for other file events, maybe some different actions for them?
                 // e.g. hover, hover left, etc.
             }
-            // Message::UsePipeline(val) => {
-            //     // TODO: this
-            //     self.system.reset();
-            //     self.use_pipeline = val;
-            // }
             Message::LoadProgram => {
-                // TODO: Fill in later...
                 self.system.reset();
                 self.system
-                    .load_program(PathBuf::from_str("matrix_multiply").unwrap());
+                    .load_program(PathBuf::from_str("test_bin").unwrap());
+                /*
+                 * Matrix Multiply Benchmark Init
+                 */
                 let mut addr = 2432;
-
                 let data = MemBlock::Unsigned32(15);
                 self.system.memory_system.force_store(addr, data);
                 addr += MEM_BLOCK_WIDTH;
@@ -192,54 +187,43 @@ impl GiggleFlopUI {
                 let data = MemBlock::Unsigned32(15);
                 self.system.memory_system.force_store(addr, data);
                 addr += MEM_BLOCK_WIDTH;
-                for i in 0..15 {
-                    for j in 0..15 {
+                for _ in 0..15 {
+                    for _ in 0..15 {
                         let data = MemBlock::Unsigned32(2);
                         self.system.memory_system.force_store(addr, data);
                         addr += MEM_BLOCK_WIDTH;
                     }
                 }
 
-                for i in 0..15 {
-                    for j in 0..15 {
+                for _ in 0..15 {
+                    for _ in 0..15 {
                         let data = MemBlock::Unsigned32(2);
                         self.system.memory_system.force_store(addr, data);
                         addr += MEM_BLOCK_WIDTH;
                     }
                 }
-
-                // let data = MemBlock::Unsigned32(2);
-                // self.system.memory_system.force_store(addr, data);
-                // addr += MEM_BLOCK_WIDTH;
-                // let data = MemBlock::Unsigned32(2);
-                // self.system.memory_system.force_store(addr, data);
-                // addr += MEM_BLOCK_WIDTH;
-                // let data = MemBlock::Unsigned32(1);
-                // self.system.memory_system.force_store(addr, data);
-                // addr += MEM_BLOCK_WIDTH;
-                // let data = MemBlock::Unsigned32(3);
-                // self.system.memory_system.force_store(addr, data);
-                // addr += MEM_BLOCK_WIDTH;
-                // let data = MemBlock::Unsigned32(4);
-                // self.system.memory_system.force_store(addr, data);
-                // addr += MEM_BLOCK_WIDTH;
-                // let data = MemBlock::Unsigned32(5);
-                // self.system.memory_system.force_store(addr, data);
-                // addr += MEM_BLOCK_WIDTH;
-                // let data = MemBlock::Unsigned32(6);
-                // self.system.memory_system.force_store(addr, data);
-                // self.system
-                //     .load_program(PathBuf::from_str("test_bin").unwrap());
-                // // let mut addr = 1152;
-                // // let len = 10;
-                // // let data_len = MemBlock::Unsigned32(len as u32);
-                // // self.system.memory_system.force_store(addr, data_len);
-                // // addr += MEM_BLOCK_WIDTH;
-                // // for val in (0..len).rev() {
-                // //     let data = MemBlock::Unsigned32(val);
-                // //     self.system.memory_system.force_store(addr, data);
-                // //     addr += MEM_BLOCK_WIDTH;
-                // // }
+                /*
+                 * Sorting Benchmark Init
+                 */
+                // let len = 100;
+                // let mut addr = 1152;
+                // for val in (0..len).rev() {
+                //     // store the value
+                //     let data = MemBlock::Unsigned32(val);
+                //     self.system.memory_system.force_store(addr, data);
+                //     // store the next pointer
+                //     addr += MEM_BLOCK_WIDTH;
+                //     let next = if val > 0 {
+                //         MemBlock::Unsigned32(addr as u32 + MEM_BLOCK_WIDTH as u32 * 4)
+                //     } else {
+                //         MemBlock::Unsigned32(0)
+                //     };
+                //     self.system.memory_system.force_store(addr, next);
+                //     addr += MEM_BLOCK_WIDTH * 4;
+                // }
+                /*
+                 * Linked List Sum Benchmark Init
+                 */
                 // let len = 100;
                 // let mut addr = 1152;
                 // for val in (0..len).rev() {
@@ -482,7 +466,6 @@ impl GiggleFlopUI {
         for (addr, decoded_instr) in raw_instrs {
             let mut text = if let Some(instr) = decoded_instr {
                 let formatted = format!("0x{addr:08X}: {}", instr);
-                // TODO: Come up with a better solution here...
                 Text::new(formatted)
             } else {
                 Text::new(format!("0x{addr:08X}: INVALID INSTRUCTION"))

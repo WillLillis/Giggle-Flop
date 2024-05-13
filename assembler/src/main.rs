@@ -634,8 +634,6 @@ fn assemble(opts: &AssemblerOptions) -> Result<()> {
 
     // get symbol to address map
     let label_to_addr = get_label_to_addr_map(&clean_conts, opts)?;
-    // TODO: figure out the reverse map Chip was talking about for debugging purposes...
-    // parse instructions... (maybe output a second file with debugging symbols")
     let instructions = get_instructions(&clean_conts, &label_to_addr, &mut comment_lines, opts)?;
     write_program(&instructions, opts)?;
 

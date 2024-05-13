@@ -168,7 +168,6 @@ impl Memory {
         }
     }
 
-    // for testing/ debugging, get rid of later (TODO:)
     /// Manually set the values of an individual address to main memory
     pub fn force_store(&mut self, address: usize, data: MemBlock) {
         let main_level_idx = self.num_levels() - 1;

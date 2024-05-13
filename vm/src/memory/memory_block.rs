@@ -74,10 +74,7 @@ impl MemBlock {
                 let data = u32::from(*data);
                 MemBlock::Unsigned32(data.wrapping_add(immediate))
             }
-            MemBlock::Unsigned32(data) => {
-                error!("FUCK {:?} + {immediate}", data);
-                MemBlock::Unsigned32(data.wrapping_add(immediate))
-            },
+            MemBlock::Unsigned32(data) => MemBlock::Unsigned32(data.wrapping_add(immediate)),
             MemBlock::Signed8(data) => {
                 let data = i32::from(*data);
                 MemBlock::Signed32(data.wrapping_add(immediate as i32))

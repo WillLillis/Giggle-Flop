@@ -93,7 +93,6 @@ impl MemoryLevel {
                 if !data.contains_address(req.address) {
                     info!("Cache line removed since request was issued.");
                     return MemResponse::Miss;
-
                 }
 
                 self.curr_reqs.remove(&mem_req);

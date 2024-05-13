@@ -1,4 +1,4 @@
-mod memory;
-mod system;
-pub mod register;
 pub mod instruction;
+mod memory;
+pub mod register;
+mod system;

@@ -11,10 +11,22 @@ A toy ISA designed and simulated from scratch.
 - Write-through no-allocate scheme
 - Direct mapped cache
 
-## TODO
+## CPU
 
-- 5 stage CPU pipeline -- Close to done!
-- Branch predictor -- TBD
-- GUI debugger -- In progress!
-- Serialization/Deserialization of program/machine state -- Stretch goal
-- Other ideas/ optimizations as we work through the project :)
+- 5 stage pipeline
+- No-Pipeline Mode
+
+## Assembler
+
+- Assembles custom assembly language code to simulator machine code
+- Helpful error messages with line numbers as appropriate
+- Single line C-style comments supported
+- Named labels supported
+
+## Misc
+
+- GUI debugger
+- Breakpoints
+- Single step execution
+- "Running" execution
+- Verbose logging

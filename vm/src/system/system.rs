@@ -84,14 +84,13 @@ pub struct System {
 }
 
 impl System {
-    // For debugging purposes, will need to make this
-    // configurable later...
+    // For debugging purposes
     pub fn default() -> Self {
         Self {
             clock: 0,
             pending_reg: HashSet::new(),
-            memory_system: Memory::new(4, &[32, 64, 256], &[1, 10, 100]),
-            should_use_pipeline: false,
+            memory_system: Memory::new(4, &[64, 64, 256], &[1, 10, 100]),
+            should_use_pipeline: true,
             registers: RegisterSet::new(),
             fetch: FetchState::default(),
             decode: PipelineStageStatus::Noop,
@@ -123,7 +122,6 @@ impl System {
         self.writeback = PipelineStageStatus::Noop;
     }
 
-    // TODO: Improve this by utilizing the drop file event
     pub fn load_program(&mut self, path: PathBuf) {
         info!("Loading program file {:?}", path);
         let program = std::fs::read(&path).unwrap();
@@ -140,7 +138,6 @@ impl System {
             panic!("Program too large");
         }
 
-        // TODO: Perform some sanitation here...
         for (i, instr) in program.windows(4).step_by(4).enumerate() {
             if instr.len() != 4 {
                 error!("Program length isn't an integer multiple of 32 bits");
@@ -155,9 +152,6 @@ impl System {
 
     fn run_no_pipeline(&mut self) -> SystemMessage {
         info!("NoPipeline: Starting a non-pipelined cycle");
-        // NOTE: just going to make this an absolutely disgusting monolith of a function
-        // for now, will clean up "later"
-
         // fetch instruction from memory
         let req = MemRequest::Load(LoadRequest {
             issuer: PipelineStage::Fetch,
@@ -199,8 +193,6 @@ impl System {
             todo!()
         };
         info!("NoPipeline: Decoded instruction to {:?}", decoded_instr);
-        // TODO: Just do the rest of the work here? Will be a little repeptive but
-        // that's fine for now...
         match decoded_instr {
             Instruction::Type0 { opcode } => {
                 info!("NoPipeline: Got Type 0 instruction, opcode: {opcode}");
@@ -232,7 +224,6 @@ impl System {
                     0 => {
                         info!("NoPipeline: CALL instruction");
                         self.pending_reg.insert((RegisterGroup::General, RET_REG));
-                        // TODO: Need to change over to one past current instruction
                         self.registers.general[RET_REG] = Register {
                             data: MemBlock::Unsigned32(self.registers.program_counter),
                         };
@@ -316,8 +307,6 @@ impl System {
                             info!("NoPipeline: Not jumping");
                         }
                     }
-                    // TODO: Jump relative is half worthless because we don't allow negative
-                    // immediate arguments...fix this
                     // IJE
                     7 => {
                         info!("NoPipeline: IJE instruction");
@@ -405,7 +394,6 @@ impl System {
                 reg_2,
             } => match opcode {
                 0..=2 => {
-                    // TODO: Account for bit widths
                     info!("NoPipeline: Comparing general registers {reg_1} and {reg_2}");
                     let flags = get_comparison_flags(
                         self.registers.general[reg_1],
@@ -859,7 +847,6 @@ impl System {
                 }
                 // ADDIM
                 9 => {
-                    // TODO: Add overflow checks later...
                     info!(
                         "NoPipeline: Adding immediate {} to register {}",
                         immediate, reg_1
@@ -877,11 +864,9 @@ impl System {
                 reg_2,
                 reg_3,
             } => {
-                // TODO: Created signed and unsigned variants...
                 match opcode {
                     // ADDI
                     0 => {
-                        // TODO: Add overflow checks later...
                         let data = self.registers.general[reg_2]
                             .data
                             .add_register(self.registers.general[reg_3].data);
@@ -1033,7 +1018,6 @@ impl System {
                 match opcode {
                     // ADDF
                     0 => {
-                        // TODO: Add overflow checks later...
                         let data = self.registers.float[freg_2]
                             .data
                             .add_register(self.registers.float[freg_3].data);
@@ -1098,9 +1082,7 @@ impl System {
         self.pipeline_writeback()
     }
 
-    // BUG: Memory requests further down in the pipeline conflict with fetch, causes
-    // deadlock (make finished requests a hashset instead of a single optional?)
-    #[allow(clippy::too_many_lines)] // TODO: Fix this later..
+    #[allow(clippy::too_many_lines)]
     fn pipeline_fetch(&mut self, decode_blocked: bool) -> PipelineStageStatus {
         info!(
             "Pipeline::Fetch: In fetch stage, current PC: {}, current instruction: {:?}",
@@ -1119,7 +1101,6 @@ impl System {
                     "Pipeline::Fetch: No current instruction, issuing fetch to memory subsystem: {:?}",
                     req
                 );
-                // TODO: Lots of cleanup here with the memory system
                 let resp = self.memory_system.request(&req);
                 info!("Pipeline::Fetch: Memory subsystem response: {:?}", resp);
                 match resp {
@@ -1293,7 +1274,6 @@ impl System {
                 } else {
                     self.decode
                 };
-                // BUG: dependencies not properly observed, not sure why
                 if let PipelineStageStatus::Instruction(instr) = completed_instr {
                     if let Some(reg) = instr.get_dest_reg() {
                         info!(
@@ -1319,9 +1299,7 @@ impl System {
         }
     }
 
-    // TODO: Fill in memory results here...
-    #[allow(clippy::too_many_lines)] // TODO: Fix this later...
-                                     // NOTE: Make sure to set flag status in result for all ALU ops...
+    #[allow(clippy::too_many_lines)]
     fn pipeline_execute(&mut self, mem_blocked: bool) -> PipelineStageStatus {
         info!(
             "Pipeline::Execute: In execute stage, current instruction: {:?}, memory blocked: {}",
@@ -1569,7 +1547,6 @@ impl System {
                             immediate,
                         } => match opcode {
                             9 => {
-                                // TODO: Add overflow checks later...
                                 info!(
                                     "Pipeline::Execute: Adding immediate {} to register {}",
                                     *immediate, *reg_1
@@ -1594,11 +1571,9 @@ impl System {
                             reg_2,
                             reg_3,
                         } => {
-                            // TODO: Created signed and unsigned variants...
                             match opcode {
                                 // ADDI
                                 0 => {
-                                    // TODO: Add overflow checks later...
                                     let data = self.registers.general[*reg_2]
                                         .data
                                         .add_register(self.registers.general[*reg_3].data);
@@ -1822,7 +1797,6 @@ impl System {
                             match opcode {
                                 // ADDF
                                 0 => {
-                                    // TODO: Add overflow checks later...
                                     let data = self.registers.float[*freg_2]
                                         .data
                                         .add_register(self.registers.float[*freg_3].data);
@@ -1909,7 +1883,7 @@ impl System {
             info!("Pipeline::Execute: Returning Noop");
             PipelineStageStatus::Noop
         } else {
-            let completed_instr = self.execute; // TODO: Fill in result for this...
+            let completed_instr = self.execute;
             info!("Pipeline::Execute: Calling decode with memory blocked = {mem_blocked}, saving result to execute's state");
             self.execute = self.pipeline_decode(mem_blocked);
             if completed_instr == PipelineStageStatus::Stall {
@@ -1925,7 +1899,7 @@ impl System {
         }
     }
 
-    #[allow(clippy::too_many_lines)] // TODO: Fix this later...
+    #[allow(clippy::too_many_lines)]
     #[must_use]
     fn pipeline_memory(&mut self) -> PipelineStageStatus {
         info!(
@@ -2046,7 +2020,6 @@ impl System {
             PipelineStageStatus::Stall => {
                 // if Noop/Stall, do nothing
                 info!("Pipeline::Memory: Stall is current state");
-                // TODO: temporary stopgap to allow pipeline to not get stuck, this should be true
                 self.pipeline_execute(true);
                 PipelineStageStatus::Stall
             }
@@ -2104,18 +2077,14 @@ impl System {
                         // breaking stuff here, causes fetch to skip over an instruction????
                         self.squash();
                     }
-                    // only used for CALL instruction?
                     PipelineInstructionResult::JumpSubRoutine {
                         new_pc,
                         ret_reg_val,
                     } => {
-                        // if JumpServiceRoutine
-                        //  - update PC and return reg
                         info!(
                             "Pipeline::Writeback: Instruction has JSR result. New PC: {}, Return Register Value: {}",
                             new_pc, ret_reg_val
                         );
-                        // BUG: double check this logic...
                         self.registers.program_counter = new_pc;
                         let addr_data = MemBlock::Unsigned32(ret_reg_val);
                         self.registers
@@ -2130,7 +2099,6 @@ impl System {
                             instr.decode_instr.unwrap(),
                             flags
                         );
-                        // TODO: Handle this...
                         for (idx, val) in flags.iter().enumerate() {
                             if let Some(flag) = val {
                                 self.registers.write_status(idx, *flag)
@@ -2198,12 +2166,6 @@ impl System {
         self.pending_reg.clear();
     }
 
-    // TODO: do this???
-    pub fn skip_instruction(&mut self) {
-        info!("Starting an instruction step");
-        todo!()
-    }
-
     fn should_use_pipeline(&self) -> bool {
         self.should_use_pipeline
     }
@@ -2267,7 +2229,6 @@ pub struct PipelineInstruction {
 }
 impl PipelineInstruction {
     /// Returns the target register group and number, if applicable
-    /// TODO: Clean up flag registers for comparisons...
     pub fn get_dest_reg(&self) -> Option<(RegisterGroup, usize)> {
         match self.decode_instr {
             Some(Instruction::Type1 { opcode, .. }) => {

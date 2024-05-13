@@ -13,7 +13,6 @@ pub const FLOAT_REG_COUNT: usize = 16;
 pub const FLAG_COUNT: usize = 6;
 pub const RET_REG: usize = GEN_REG_COUNT - 1;
 
-// TODO: Maybe refactor this so we load it into a hashmap in the assembler?
 pub const TYPE_0_INSTRS: &[&str] = &["RET", "HALT"];
 pub const TYPE_1_INSTRS: &[&str] = &[
     "CALL", "JE", "JNE", "JGT", "JLT", "JGTE", "JLTE", "IJE", "IJNE", "IJGT", "IJLT", "IJGTE",
@@ -110,7 +109,7 @@ impl RegisterSet {
     pub fn new() -> Self {
         let general = core::array::from_fn(|_| Register::default());
         let float = core::array::from_fn(|_| Register::default());
-        let program_counter = 0; // TODO: Different default value?
+        let program_counter = 0;
         let flags = Bitmap::new();
 
         RegisterSet {
